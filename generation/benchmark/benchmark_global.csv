@@ -1,0 +1,5 @@
+Rang,Modèle,Paradigme,Accuracy (%),Macro F1 (%)
+1,ConvNeXt-Tiny,CNN Moderne (SOTA),92.89,93.0
+2,MobileNetV3-ECA,Edge-AI Léger (Inverted Res.),90.89,91.05
+3,Swin-T,Vision Transformer (Shifted),90.67,90.7
+4,EfficientNet-V2-S,CNN Multi-Échelle (NAS),88.89,88.98

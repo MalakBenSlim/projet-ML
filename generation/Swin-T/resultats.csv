@@ -1,0 +1,6 @@
+Classe,Precision,Recall,F1-Score,Support
+Healthy (Saine),0.9756,1.0,0.9877,120
+Bug (Insectes seuls),0.8958,0.9556,0.9247,90
+Honey (Miellat),0.9074,0.8167,0.8596,120
+Mixed (Infestation mixte),0.8455,0.8667,0.856,120
+GLOBAL (Macro),0.9061,0.9097,0.907,450

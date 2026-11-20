@@ -1,330 +1,440 @@
-# 🌴 Classification Automatisée des Feuilles de Palmier Dattier Infestées par le Dubas (*Ommatissus lybicus*)
+# 🌴 Détection et Classification des Maladies du Palmier Dattier
+### Benchmark Approfondi de 4 Algorithmes d'Apprentissage Profond (Vision Transformers & CNNs Modernes)
 
 <div align="center">
 
-[![Python](https://img.shields.io/badge/Python-3.9%2B-blue.svg?logo=python&logoColor=white)](https://www.python.org/)
-[![PyTorch](https://img.shields.io/badge/PyTorch-2.0%2B-EE4C2C.svg?logo=pytorch&logoColor=white)](https://pytorch.org/)
-[![Scikit-Learn](https://img.shields.io/badge/Scikit--Learn-1.2%2B-F7931E.svg?logo=scikit-learn&logoColor=white)](https://scikit-learn.org/)
-[![OpenCV](https://img.shields.io/badge/OpenCV-4.7%2B-5C3EE8.svg?logo=opencv&logoColor=white)](https://opencv.org/)
-[![Dataset DOI](https://img.shields.io/badge/Mendeley_Data-10.17632%2F2nh364p2bc.2-00599C.svg)](https://data.mendeley.com/datasets/2nh364p2bc/2)
-[![Paper DOI](https://img.shields.io/badge/Data_in_Brief-10.1016%2Fj.dib.2023.109371-orange.svg)](https://doi.org/10.1016/j.dib.2023.109371)
-[![License: MIT](https://img.shields.io/badge/Licence-MIT-green.svg)](LICENSE)
-
-**Projet Universitaire de Recherche & Ingénierie en Vision par Ordinateur**  
-*Étude comparative entre apprentissage automatique classique (Machine Learning) et apprentissage profond (Deep Learning) pour l'agriculture de précision.*
-
-<br/>
-
-<img src="generale.jpg" alt="Aperçu général des symptômes foliaires du palmier dattier" width="750"/>
-
-*Figure 1 : Aperçu global des folioles de palmier dattier (*Phoenix dactylifera*) selon les différents stades d'infestation par le dubas.*
+![Python](https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white)
+![PyTorch](https://img.shields.io/badge/PyTorch-2.15-EE4C2C?logo=pytorch&logoColor=white)
+![Torchvision](https://img.shields.io/badge/Torchvision-0.29-FF6F00)
+![Top Model](https://img.shields.io/badge/Champion-ConvNeXt--Tiny_92.89%25-2ECC71?style=for-the-badge)
+![Dataset](https://img.shields.io/badge/Dataset-3000_images-8E44AD?style=for-the-badge)
+![Classes](https://img.shields.io/badge/Classes-4_états_sanitaires-3498DB?style=for-the-badge)
 
 </div>
 
 ---
 
-## 📌 Sommaire
+## 📑 Sommaire
 
-- [1. Présentation & Contexte Agronomique](#-1-présentation--contexte-agronomique)
-- [2. Audit Technique du Jeu de Données](#-2-audit-technique-du-jeu-de-données)
-  - [Corrections des informations et organisation réelle](#a-organisation-physique-et-correspondance-des-classes)
-  - [Répartition statistique](#b-statistiques-et-distribution-des-classes)
-  - [Galerie visuelle des 4 classes](#c-galerie-visuelle-des-quatre-classes)
-- [3. Architecture du Projet & Pipeline de Traitement](#-3-architecture-du-projet--pipeline-de-traitement)
-  - [Structure du dépôt](#a-arborescence-du-projet)
-  - [Pipeline méthodologique de bout en bout](#b-pipeline-méthodologique)
-- [4. Stratégie d'Extraction de Caractéristiques](#-4-stratégie-dextraction-de-caractéristiques)
-- [5. Modélisation : Approches ML & Deep Learning](#-5-modélisation--approches-ml--deep-learning)
-- [6. Protocole Expérimental & Métriques d'Évaluation](#-6-protocole-expérimental--métriques-dévaluation)
-- [7. Intelligence Artificielle Explicable (XAI)](#-7-intelligence-artificielle-explicable-xai)
-- [8. Guide d'Installation & Démarrage Rapide](#-8-guide-dinstallation--démarrage-rapide)
-- [9. Références Scientifiques & Citation](#-9-références-scientifiques--citation)
+1. [Contexte Agronomique et Enjeux](#1-contexte-agronomique-et-enjeux)
+2. [Audit Approfondi du Jeu de Données](#2-audit-approfondi-du-jeu-de-données)
+3. [Architecture Globale du Projet](#3-architecture-globale-du-projet)
+4. [Méthodologie Expérimentale (Transfer Learning)](#4-méthodologie-expérimentale-transfer-learning)
+5. [Analyse Détaillée des 4 Algorithmes Proposés](#5-analyse-détaillée-des-4-algorithmes-proposés)
+6. [Résultats Expérimentaux et Benchmark](#6-résultats-expérimentaux-et-benchmark)
+7. [Galerie des Matrices de Confusion et Performances](#7-galerie-des-matrices-de-confusion-et-performances)
+8. [Organisation des Dossiers Générés](#8-organisation-des-dossiers-générés)
+9. [Guide d'Installation et Déploiement](#9-guide-dinstallation-et-déploiement)
+10. [Références Scientifiques](#10-références-scientifiques)
 
 ---
 
-## 🔬 1. Présentation & Contexte Agronomique
+## 1. Contexte Agronomique et Enjeux
 
-Le palmier dattier (*Phoenix dactylifera*) constitue l'épine dorsale de l'agriculture oasienne et de l'économie fruitière dans la région MENA (Moyen-Orient et Afrique du Nord). Cependant, cette culture fait face à une menace phytosanitaire majeure : l'insecte **Dubas** (*Ommatissus lybicus* Bergevin / *Ommatissus binotatus lybicus*).
+Le palmier dattier (*Phoenix dactylifera* L.) est une culture d'importance vitale pour l'économie et la biodiversité oasienne. L'un des bio-agresseurs les plus destructeurs est l'insecte ravageur **Ommatissus lybicus** (communément appelé **Dubas bug**).
 
-### 🐛 La Problématique Biologique
-- **Dégâts directs** : Les nymphes et les adultes piquent les folioles (palmes) et sucent la sève élaborée, entraînant un affaiblissement progressif de l'arbre, le jaunissement foliaire et une baisse drastique de la qualité des dattes.
-- **Dégâts indirects** : L'insecte exsude d'importantes quantités de liquide sucré et visqueux (**le miellat**). Ce substrat favorise la prolifération de champignons noirs saprophytes (**la fumagine**), formant une pellicule opaque qui bloque l'interception de la lumière solaire et asphyxie la photosynthèse.
+### Cycle d'Infestation et Symptômes
 
-<div align="center">
-  <blockquote>
-    <b>🎯 Défi scientifique :</b> L'inspection visuelle manuelle des cimes de palmiers (dépassant souvent 10 à 15 mètres de hauteur) est lente, coûteuse et physiquement dangereuse. L'objectif de ce projet est de concevoir un système automatisé de vision par ordinateur, capable de discriminer avec précision les folioles saines, la présence d'insectes, le miellat et les infestations mixtes, à partir d'images haute résolution capturées par capteurs ou drones.
-  </blockquote>
-</div>
+- **Stade Bug (Insectes seuls)** : Présence des adultes et des larves suceuses de sève sur les folioles.
+- **Stade Honey (Miellat)** : Excrétion de substances sucrées et visqueuses recouvrant les palmes.
+- **Stade Mixed (Infestation mixte & Fumagine)** : Sur le miellat prolifère un complexe de champignons saprophytes (la fumagine), créant une croûte noire opaque qui bloque la photosynthèse foliaire.
+- **Stade Healthy (Saine)** : Folioles vigoureuses, sans parasite ni sécrétion.
+
+```mermaid
+flowchart LR
+    H["🌿 Healthy\n(Saine)"] --> B["🐛 Bug\n(Insectes seuls)"]
+    B --> M["🍯 Honey\n(Miellat visqueux)"]
+    M --> X["🥀 Mixed\n(Insectes + Miellat + Fumagine)"]
+```
+
+Le présent système automatise le diagnostic phytosanitaire par vision par ordinateur afin de permettre un traitement ciblé, précoce et respectueux de l'environnement.
 
 ---
 
-## 📊 2. Audit Technique du Jeu de Données
+## 2. Audit Approfondi du Jeu de Données
 
-Le jeu de données officiel a été collecté dans des vergers de palmiers de la région d'Aoun (Gouvernorat de Kerbala, Irak) et documenté dans la revue internationale *Data in Brief* (Elsevier, 2023).
+Le jeu de données provient du dépôt source [MalakBenSlim/projet-ML](https://github.com/MalakBenSlim/projet-ML.git).
 
-### A. Organisation Physique et Correspondance des Classes
+### Audit Qualitatif et Technique
+
+- **Volume total** : 3 000 photographies foliaires haute définition.
+- **Intégrité** : 100 % des fichiers sont valides (aucune corruption d'image).
+- **Espace colorimétrique** : 100 % RVB (3 canaux).
+- **Résolutions natives** : 896×896 px (majoritaire), 892×892 px et 1792×1792 px.
+- **Gestion Git** : Le répertoire volumineux du jeu de données (`Image dataset of infected date palm leaves/`) est répertorié dans `.gitignore` pour assurer la légèreté du dépôt.
+
+### Composition des Classes
+
+| Dossier Source | Classe Sémantique Réelle | Caractéristiques Visuelles | Effectif | Proportion |
+|:--------------:|:-------------------------|:---------------------------|:--------:|:----------:|
+| `Healthy/` | **Healthy (Saine)** | Tissu foliaire vert chlorophyllien homogène | 800 | 26.67 % |
+| `Bug/` | **Bug (Insectes seuls)** | Individus Dubas visibles sur foliole | 600 | 20.00 % |
+| `Honey/` | **Honey (Miellat)** | Aspect laqué, brillant des gouttelettes | 800 | 26.67 % |
+| `Dubas/` | **Mixed (Infestation mixte)** | Présence simultanée insectes, miellat et suie | 800 | 26.67 % |
+| **Total** | | | **3 000** | **100 %** |
 
 > [!IMPORTANT]
-> **Clarification technique essentielle (Correction des fausses informations) :**  
-> L'archive d'origine présente un nommage de dossiers qu'il convient d'interpréter rigoureusement pour éviter toute erreur d'étiquetage lors de l'entraînement (*Label Mapping*) :
+> **Précision taxonomique** : Le dossier `Dubas/` du dataset original représente la classe sémantique **Mixed (Infestation mixte)**, tandis que le dossier `Bug/` isole les insectes seuls.
 
-| Nom du dossier sur disque | Préfixe des fichiers | Classe sémantique réelle | Description biologique |
-| :--- | :--- | :--- | :--- |
-| `Healthy/` | `Healthy(x).jpg` | **Saine (Healthy)** | Folioles intactes, tissu vert uniforme, absence de parasite. |
-| `Bug/` | `Bug(x).JPG` | **Insectes Dubas (Bug)** | Présence visible de nymphes ou adultes de dubas sans nappe massive de miellat. |
-| `Honey/` | `Honey(x).jpg` | **Miellat (Honey)** | Dépôts collants et gouttelettes de miellat sécrétés sur la surface foliaire. |
-| `Dubas/` *(attention)* | `Mixed(x).jpg` | **Infestation Mixte (Mixed)** | Coexistence d'insectes vivants et de sécrétions de miellat sur la même foliole. |
+### Visualisation de la Distribution
 
-### B. Statistiques et Distribution des Classes
+![Distribution des classes](generation/benchmark/dataset_distribution.png)
 
-Un audit systématique par script Python a validé l'intégrité de l'ensemble des fichiers :
-- **Nombre total d'images :** 3 000
-- **Images corrompues ou illisibles :** 0
-- **Espace colorimétrique :** 100 % RVB (3 canaux, 8-bit par canal)
-- **Résolution native :** $896 \times 896$ pixels (majorité absolue, avec de rares variantes conformes à $892 \times 892$ et $1792 \times 1792$)
+### Exemples d'Images du Dataset
 
-```
-Distribution globale du jeu de données :
-├── Saines (Healthy)          : 800 images (26.67 %)
-├── Miellat (Honey)           : 800 images (26.67 %)
-├── Infestation Mixte (Mixed) : 800 images (26.67 %)
-└── Insectes Dubas (Bug)      : 600 images (20.00 %)
-TOTAL                         : 3 000 images
-```
+![Exemples de folioles par classe](generation/benchmark/dataset_samples.png)
 
-<div align="center">
-  <img src="assets/class_distribution.png" alt="Distribution des classes du jeu de données" width="700"/>
-  <p><em>Figure 2 : Répartition des classes. Le jeu de données est quasi-équilibré, avec un léger déséquilibre maîtrisé sur la classe Bug (ratio 1:1.33).</em></p>
-</div>
+### Protocole de Partitionnement Stratifié
 
-### C. Galerie Visuelle des Quatre Classes
-
-Chaque catégorie possède une signature visuelle spécifique capturée en haute définition :
-
-<div align="center">
-  <img src="assets/dataset_samples.png" alt="Échantillons représentatifs des 4 classes" width="950"/>
-  <p><em>Figure 3 : Exemples visuels représentatifs issus directement du jeu de données (résolution native de 896 × 896 px).</em></p>
-</div>
-
-1. **Feuille Saine (`Healthy`)** : Nervures longitudinales régulières, couleur verte homogène sans taches chlorotiques ni exsudats.
-2. **Insectes Dubas (`Bug`)** : Présence ponctuelle de petits corps d'insectes (stades larvaires ou adultes jaunâtres/brunâtres) le long de la nervure.
-3. **Miellat (`Honey`)** : Zones brillantes, aspect translucide à vitreux sous la lumière, dépôts liquides créant des reflets spéculaires.
-4. **Infestation Mixte (`Mixed / Dubas`)** : Cumul de dépôts visqueux étendus et d'agrégats d'insectes, stade le plus sévère de l'attaque parasitaire.
+Pour éviter tout biais et garantir une évaluation objective sur données non vues :
+- **Partitionnement stratifié** : Maintien strict des ratios de classes (70 % train, 15 % val, 15 % test).
+- **Graine de reproductibilité** : `random_state = 42`.
+  - **Entraînement (Train)** : 2 100 images
+  - **Validation (Val)** : 450 images
+  - **Test Indépendant (Test)** : 450 images
 
 ---
 
-## 🛠️ 3. Architecture du Projet & Pipeline de Traitement
+## 3. Architecture Globale du Projet
 
-### A. Arborescence du Projet
+Le projet adopte une structure modulaire épurée, dédiée exclusivement aux 4 modèles de Deep Learning :
 
-```text
+```
 projet ML/
 │
-├── README.md                                     # Documentation académique et guide technique
-├── requirements.txt                              # Dépendances Python (PyTorch, scikit-learn, etc.)
-├── generale.jpg                                  # Photographie scientifique de référence
+├── 📂 Image dataset of infected date palm leaves/   # Dataset brut (3000 images, dans .gitignore)
+│   └── .../Palm Leaves Dataset/
+│       ├── Healthy/                                 # 800 images
+│       ├── Bug/                                     # 600 images
+│       ├── Honey/                                   # 800 images
+│       └── Dubas/                                   # 800 images (Classe 'Mixed')
 │
-├── assets/                                       # Ressources graphiques et visualisations générées
-│   ├── class_distribution.png                    # Graphique de répartition des classes
-│   ├── dataset_samples.png                       # Échantillons haute résolution des 4 classes
-│   ├── feature_extraction_preview.png            # Visualisation des descripteurs de caractéristiques
-│   ├── ml_architecture.png                       # Schéma de l'architecture complète du pipeline
-│   └── generale.jpg                              # Copie miroir de l'image de synthèse
+├── 📂 models/                                       # Poids des 4 modèles Deep Learning
+│   ├── convnext_tiny_head.pth                       # Tête entraînée ConvNeXt-Tiny
+│   ├── mobilenetv3_eca_head.pth                     # Tête entraînée MobileNetV3-ECA
+│   ├── swin_t_head.pth                              # Tête entraînée Swin Transformer
+│   └── efficientnet_v2_s_head.pth                   # Tête entraînée EfficientNet-V2-S
 │
-└── Image dataset of infected date palm leaves/   # Répertoire racine du jeu de données
-    └── Image dataset of infected date palm leaves by dubas insects/
-        └── Palm Leaves Dataset/
-            ├── Bug/                              # 600 images - Insectes seuls (Bug(1).JPG ...)
-            ├── Dubas/                            # 800 images - Infestation mixte (Mixed(1).jpg ...)
-            ├── Healthy/                          # 800 images - Feuilles saines (Healthy(1).jpg ...)
-            └── Honey/                            # 800 images - Miellat sécrété (Honey(1).jpg ...)
+├── 📂 generation/                                   # Artefacts d'évaluation générés
+│   ├── 📂 benchmark/                                # Synthèse comparative & dataset
+│   │   ├── benchmark_global.png                     # Graphique comparatif des 4 algorithmes
+│   │   ├── benchmark_global.csv                     # Tableau officiel des performances
+│   │   ├── confusion_matrices_combined.png          # Grille 2x2 des matrices de confusion
+│   │   ├── dataset_distribution.png                 # Histogramme des classes
+│   │   └── dataset_samples.png                      # Galerie d'exemples annotés
+│   ├── 📂 ConvNeXt-Tiny/                            # Résultats ConvNeXt-Tiny (Champion)
+│   │   ├── confusion_matrix.png
+│   │   ├── per_class_metrics.png
+│   │   └── resultats.csv
+│   ├── 📂 MobileNetV3-ECA/                          # Résultats MobileNetV3-ECA (Edge-AI)
+│   │   ├── confusion_matrix.png | per_class_metrics.png | resultats.csv
+│   │
+│   ├── 📂 Swin-T/                                   # Résultats Swin Transformer
+│   │   ├── confusion_matrix.png | per_class_metrics.png | resultats.csv
+│   │
+│   └── 📂 EfficientNet-V2-S/                        # Résultats EfficientNet-V2-S
+│       ├── confusion_matrix.png | per_class_metrics.png | resultats.csv
+│
+├── 🐍 train_and_evaluate_deep_models.py             # Script d'entraînement complet
+├── 🐍 generate_all_outputs.py                       # Script de régénération des résultats
+├── 🐍 app_streamlit.py                              # Application Web interactive (Streamlit)
+├── 🐍 app_desktop.py                                # Application Desktop locale (Tkinter)
+├── 🚀 lancer_interface.bat                          # Lancement en 1 clic de l'interface Web
+├── 🚀 lancer_interface_desktop.bat                  # Lancement en 1 clic de l'application Desktop
+├── 📋 requirements.txt                              # Dépendances Python requises
+├── 🙈 .gitignore                                    # Configuration d'exclusion Git (inclut dataset)
+└── 📖 README.md                                     # Documentation de référence
 ```
 
-### B. Pipeline Méthodologique
+---
 
-Le projet adopte une architecture modulaire à deux voies complémentaires : l'une basée sur l'ingénierie de caractéristiques artisanales couplée à des modèles statistiques légers, l'autre exploitant des réseaux de neurones profonds par apprentissage par transfert (*Transfer Learning*).
+## 4. Méthodologie Expérimentale (Transfer Learning)
 
-<div align="center">
-  <img src="assets/ml_architecture.png" alt="Architecture globale du pipeline Machine Learning" width="900"/>
-  <p><em>Figure 4 : Pipeline complet de traitement des données, de l'ingestion à l'explicabilité (XAI).</em></p>
-</div>
+### Pipeline d'Inférence et d'Entraînement
 
 ```mermaid
 flowchart TD
-    A["📸 Données Brutes (3 000 images RVB)"] --> B["⚙️ Prétraitement & Découpage Stratifié (70/15/15)"]
-    
-    B --> C["🧪 Voie A : Extraction de Descripteurs"]
-    B --> D["🧠 Voie B : Deep Learning (End-to-End)"]
-    
-    C --> C1["Gradients HOG + Textures LBP + Hist. HSV"]
-    C1 --> C2["Mise à l'échelle (StandardScaler)"]
-    C2 --> C3["Classificateurs : SVM (RBF) / Random Forest / XGBoost"]
-    
-    D --> D1["Data Augmentation (Flip, Rotation, Jitter)"]
-    D1 --> D2["Backbones : ResNet-18 / MobileNetV3 / EfficientNet-B0"]
-    D2 --> D3["Fine-Tuning & Optimisation (AdamW, Cross-Entropy)"]
-    
-    C3 --> E["📈 Évaluation Rigoureuse"]
-    D3 --> E
-    
-    E --> F["Métriques : Macro F1-Score, Matrice de Confusion"]
-    E --> G["🔍 Explicabilité : Grad-CAM & Importance SHAP"]
+    IMG["📸 Image Foliaire (224×224×3)"] --> NORM["Normalisation ImageNet\nμ=[0.485, 0.456, 0.406]\nσ=[0.229, 0.224, 0.225]"]
+    NORM --> BACKBONE["Backbone Pré-entraîné ImageNet-1K\n(Poids gelés / requires_grad=False)"]
+    BACKBONE --> FEATS["Vecteur Latent d-dimensionnel\n(ConvNeXt: 768 | MobileNet: 960\nSwin: 768 | EfficientNet: 1280)"]
+    FEATS --> HEAD["Tête de Classification Entraînable :\nLinear(d → 256) → BatchNorm1d → ReLU → Dropout(0.2) → Linear(256 → 4)"]
+    HEAD --> SOFTMAX["Softmax & Diagnostic :\n[Healthy, Bug, Honey, Mixed]"]
 ```
 
----
+### Paramètres d'Apprentissage
 
-## 🔍 4. Stratégie d'Extraction de Caractéristiques
-
-Pour l'approche en apprentissage automatique classique, les images brutes ne peuvent être injectées directement sans une étape d'ingénierie d'attributs visuels ciblés :
-
-<div align="center">
-  <img src="assets/feature_extraction_preview.png" alt="Aperçu des méthodes d'extraction de caractéristiques" width="950"/>
-  <p><em>Figure 5 : Analyse multi-spectrale et spatiale sur une foliole atteinte : Image RVB originale, gradients de texture (Sobel), segmentation colorimétrique HSV du miellat, et profils d'histogrammes RVB.</em></p>
-</div>
-
-1. **Histogrammes de Couleur (Espaces HSV & Lab)** :
-   - *Intérêt :* Le miellat et la décoloration chlorotique modifient la saturation ($S$) et la composante chromatique ($a^*, b^*$).
-   - *Usage :* Vecteur de 32 bins par canal pour quantifier la perte de verdeur.
-2. **Histogrammes de Gradients Orientés (HOG - *Histogram of Oriented Gradients*)** :
-   - *Intérêt :* Détection des contours nets, des formes oblongues des insectes dubas et des gouttelettes en relief.
-3. **Motifs Binaires Locaux (LBP - *Local Binary Patterns*)** :
-   - *Intérêt :* Invariant aux variations d'éclairage, parfait pour caractériser la rugosité de la surface foliaire et la texture fine de la fumagine.
-4. **Plongements Pré-entraînés (*Deep Embeddings*)** :
-   - *Intérêt :* Utilisation des couches intermédiaires d'un réseau convolutif gelé (ex. ResNet-18 sans sa tête de classification) pour extraire un vecteur compact de 512 caractéristiques latentes.
+- **Stratégie** : *Feature Extraction* (colonnes vertébrales gelées, optimisation de la tête dense personnalisée).
+- **Optimiseur** : AdamW avec découplage du decay de poids ($\text{weight\_decay} = 10^{-2}$).
+- **Taux d'apprentissage** : $\text{lr} = 10^{-3}$ avec planification par recuit cosinusoïdal (*Cosine Annealing* sur 40 époques).
+- **Fonction de perte** : Entropie croisée (*Cross-Entropy Loss*).
 
 ---
 
-## ⚡ 5. Modélisation : Approches ML & Deep Learning
+## 5. Analyse Détaillée des 4 Algorithmes Proposés
 
-Le tableau suivant synthétise l'évaluation académique des 8 algorithmes envisagés pour la tâche de classification à 4 classes :
+Chacun des 4 algorithmes illustre un paradigme de pointe :
 
-| Famille | Algorithme | Caractéristiques d'entrée | Atouts majeurs | Limites / Compromis | Recommandation |
-| :--- | :--- | :--- | :--- | :--- | :---: |
-| **ML Classique** | **SVM (Noyau RBF)** | HOG + LBP + HSV (standardisés) | Excellente frontière de décision en grande dimension | Coût quadratique si grand volume | ⭐⭐⭐⭐ (Solide baseline) |
-| **ML Classique** | **Random Forest** | Descripteurs concaténés | Robuste au bruit, résistant au surapprentissage | Moins sensible aux détails de texture subtils | ⭐⭐⭐⭐ (Robuste) |
-| **ML Classique** | **XGBoost** | Descripteurs concaténés | Gradient boosting ultra-performant sur données tabulaires | Réglage délicat des hyperparamètres | ⭐⭐⭐⭐ (Très performant) |
-| **ML Classique** | **K-NN ($k=5$)** | Plongements normalisés | Simple, sans phase d'entraînement explicite | Lenteur à l'inférence, sensible aux dimensions | ⭐⭐ (Pédagogique) |
-| **Deep Learning** | **MobileNetV3-Small** | Images RVB ($224 \times 224$) | Ultra-léger (~2.5M params), taillé pour drones & IoT | Précision légèrement inférieure aux modèles lourds | ⭐⭐⭐⭐⭐ (Idéal Déploiement) |
-| **Deep Learning** | **ResNet-18** | Images RVB ($224 \times 224$) | Blocs résiduels stables, convergence rapide | Capacité limitée sur détails microscopiques | ⭐⭐⭐⭐⭐ (Équilibre Idéal) |
-| **Deep Learning** | **EfficientNet-B0** | Images RVB ($224 \times 224$) | Échelonnage composé optimal (Compound Scaling) | Consommation mémoire plus élevée lors du fine-tuning | ⭐⭐⭐⭐⭐ (Haute Précision) |
-| **Deep Learning** | **CNN "From Scratch"** | Images RVB ($224 \times 224$) | Totalement personnalisable | Risque élevé de surapprentissage sur 3 000 images | ⭐⭐⭐ (Académique) |
+### 5.1. ConvNeXt-Tiny (Champion du Benchmark 🏆 — 92.89 %)
 
----
+*ConvNeXt* modernise les réseaux convolutifs classiques en y intégrant les principes novateurs des Vision Transformers : convolutions inversées 7×7 à profondeur séparable (*depthwise separable*), normalisation LayerNorm et activations GELU.
 
-## 🎯 6. Protocole Expérimental & Métriques d'Évaluation
+```mermaid
+flowchart LR
+    IN_CN["Entrée 224×224"] --> STAGES["4 Étapes ConvNeXt\n(Convolutions 7×7 Depthwise)"]
+    STAGES --> POOL_CN["Global AvgPool"]
+    POOL_CN --> LN["LayerNorm (768)"]
+    LN --> HEAD_CN["Tête Dense\n(768 → 256 → 4)"]
+    HEAD_CN --> OUT_CN["Diagnostic 4 Classes"]
+```
 
-### A. Découpage et Validation
-- **Partitionnement Stratifié :** 70 % Apprentissage (2 100 images), 15 % Validation (450 images), 15 % Test (450 images).
-- **Validation Croisée :** Stratified $k$-fold ($k=5$) pour fiabiliser l'évaluation statistique des modèles classiques.
-- **Politique Anti-Fuite (*Data Leakage*) :** Les transformations d'augmentation de données (flips horizontaux/verticaux, rotations légères $\pm 15^\circ$, variations photométriques) sont appliquées **exclusivement** sur le sous-ensemble d'entraînement.
-
-### B. Justification du Choix des Métriques
-Bien que l'exactitude globale (*Accuracy*) offre un indicateur immédiat, elle peut masquer des défaillances sur les classes minoritaires :
-
-$$\text{Macro F1-Score} = \frac{1}{C} \sum_{i=1}^{C} \frac{2 \cdot \text{Precision}_i \cdot \text{Recall}_i}{\text{Precision}_i + \text{Recall}_i} \quad \text{avec } C = 4$$
-
-> [!NOTE]
-> Le **Macro F1-Score** accorde un poids identique à chaque classe sans privilégier les classes majoritaires. Il garantit que la classe **Bug** (600 images) est détectée avec la même rigueur que les autres classes (800 images chacune).
+- **Famille** : CNN Moderne SOTA
+- **Paramètres du backbone** : 28.6 M
+- **Dimension latente** : 768 descripteurs
+- **Atout phytosanitaire** : Exceptionnelle acuité sur les micro-textures des gouttelettes de miellat et la segmentation fine des insectes.
+- **Accuracy Test** : **92.89 %** | **Macro F1** : **93.00 %**
 
 ---
 
-## 💡 7. Intelligence Artificielle Explicable (XAI)
+### 5.2. MobileNetV3-Large ECA (Excellence Edge-AI 🥈 — 90.89 %)
 
-Dans une application agronomique critique, un modèle ne peut être déployé comme une "boîte noire". Il est impératif de vérifier que la décision s'appuie sur de réels critères biologiques (présence de l'insecte ou de gouttelettes) et non sur des artefacts d'arrière-plan ou de luminosité.
+Conçu spécifiquement pour le calcul à ressources contraintes, ce réseau intègre des blocs Inverted Residuals, des activations Hard-Swish et un module d'attention par canal *Efficient Channel Attention* (ECA).
 
-- **Grad-CAM (*Gradient-weighted Class Activation Mapping*)** : Calcule les gradients des scores de classe par rapport aux cartes d'activation de la dernière couche convolutive pour générer une carte de chaleur superposée à l'image d'origine.
-- **SHAP (*SHapley Additive exPlanations*)** : Utilisé pour les forêts aléatoires et XGBoost, quantifiant l'impact marginal de chaque descripteur (texture LBP vs composante de couleur $S$).
+```mermaid
+flowchart LR
+    IN_MB["Entrée 224×224"] --> MB_BLOCKS["Inverted Residuals\n+ Attention ECA / SE"]
+    MB_BLOCKS --> POOL_MB["Global AvgPool (960)"]
+    POOL_MB --> HEAD_MB["Tête Dense\n(960 → 256 → 4)"]
+    HEAD_MB --> OUT_MB["Diagnostic 4 Classes"]
+```
+
+- **Famille** : Edge-AI Léger
+- **Paramètres du backbone** : 5.4 M (5 fois plus compact que ConvNeXt)
+- **Dimension latente** : 960 descripteurs
+- **Atout phytosanitaire** : Modèle idéal pour un déploiement direct sur terminal mobile hors-ligne, drone de pulvérisation ou caméra embarquée au verger.
+- **Accuracy Test** : **90.89 %** | **Macro F1** : **91.05 %**
 
 ---
 
-## 🚀 8. Guide d'Installation & Démarrage Rapide
+### 5.3. Swin Transformer - Tiny (Swin-T 🥉 — 90.67 %)
 
-### Prérequis
-- Python 3.9 ou version supérieure
-- Gestionnaire de paquets `pip` ou environnement `conda`
+Vision Transformer hiérarchique reposant sur le mécanisme d'attention en fenêtres décalées (*Shifted Windows*), permettant de combiner calcul d'attention local à faible coût et intégration multi-échelles.
 
-### 1. Installation des dépendances
+```mermaid
+flowchart LR
+    IN_SW["Entrée 224×224"] --> PATCH["Patch Partition (4×4)"]
+    PATCH --> BLOCKS_SW["Blocs Swin Transformer\n(Shifted Window Attention)"]
+    BLOCKS_SW --> NORM_SW["LayerNorm (768)"]
+    NORM_SW --> HEAD_SW["Tête Dense\n(768 → 256 → 4)"]
+    HEAD_SW --> OUT_SW["Diagnostic 4 Classes"]
+```
+
+- **Famille** : Vision Transformer Hiérarchique
+- **Paramètres du backbone** : 28.3 M
+- **Dimension latente** : 768 descripteurs
+- **Atout phytosanitaire** : Capture des corrélations spatiales à longue distance entre zones nécrosées et folioles saines.
+- **Accuracy Test** : **90.67 %** | **Macro F1** : **90.70 %**
+
+---
+
+### 5.4. EfficientNet-V2-S (CNN Multi-Échelle — 88.89 %)
+
+Réseau convolutif multi-échelle issu d'une recherche d'architecture neuronale (NAS) conjointe pour la précision et la rapidité d'inférence, remplaçant les premiers blocs MBConv par des *Fused-MBConv*.
+
+```mermaid
+flowchart LR
+    IN_EF["Entrée 224×224"] --> FUSED["Fused-MBConv Stages"]
+    FUSED --> CONV_EF["MBConv Stages (SE Attention)"]
+    CONV_EF --> POOL_EF["Global AvgPool (1280)"]
+    POOL_EF --> HEAD_EF["Tête Dense\n(1280 → 256 → 4)"]
+    HEAD_EF --> OUT_EF["Diagnostic 4 Classes"]
+```
+
+- **Famille** : CNN Multi-Échelle (NAS)
+- **Paramètres du backbone** : 21.5 M
+- **Dimension latente** : 1280 descripteurs
+- **Atout phytosanitaire** : Grande richesse de représentation sémantique (vecteur latent de 1280 composantes).
+- **Accuracy Test** : **88.89 %** | **Macro F1** : **88.98 %**
+
+---
+
+## 6. Résultats Expérimentaux et Benchmark
+
+Les 4 modèles ont été évalués dans des conditions expérimentales rigoureusement identiques sur le **jeu de test indépendant de 450 images**.
+
+### Tableau Comparatif Officiel
+
+| Rang | Modèle | Paradigme Architectural | Paramètres | Accuracy Test | Macro F1-Score |
+|:---:|:---|:---|:---:|:---:|:---:|
+| 🥇 1 | **ConvNeXt-Tiny** | CNN Moderne (Patchs 7×7, GELU) | 28.6 M | **92.89 %** | **93.00 %** |
+| 🥈 2 | **MobileNetV3-ECA** | Edge-AI Léger (Inverted Residuals) | 5.4 M | **90.89 %** | **91.05 %** |
+| 🥉 3 | **Swin-T** | Vision Transformer (Shifted Windows) | 28.3 M | **90.67 %** | **90.70 %** |
+| 4 | **EfficientNet-V2-S** | CNN Multi-Échelle (Fused-MBConv) | 21.5 M | **88.89 %** | **88.98 %** |
+
+### Graphique Comparatif du Benchmark
+
+![Benchmark global des 4 algorithmes](generation/benchmark/benchmark_global.png)
+
+---
+
+### Analyse Détaillée des Performances par Classe — ConvNeXt-Tiny
+
+| Classe Sanitaire | Précision | Rappel | F1-Score | Support (Test) |
+|:-----------------|:---------:|:------:|:--------:|:--------------:|
+| **Healthy (Saine)** | **0.9836** | **1.0000** | **0.9917** | 120 |
+| **Bug (Insectes seuls)** | **0.9271** | **0.9889** | **0.9570** | 90 |
+| **Honey (Miellat)** | 0.9123 | 0.8667 | 0.8889 | 120 |
+| **Mixed (Infestation mixte)** | 0.8898 | 0.8750 | 0.8824 | 120 |
+| **Moyenne Macro (Global)** | **0.9282** | **0.9326** | **0.9300** | **450** |
+
+> [!TIP]
+> **Interprétation agronomique des métriques** :
+> 1. **100 % de rappel sur les palmes saines** : Zéro faux positif, évitant tout traitement phytosanitaire inutile.
+> 2. **98.89 % de rappel sur les insectes seuls** : Détection ultra-précoce des foyers d'adultes Dubas avant la ponte larvaire.
+> 3. **Cohérence biologique** : Les rares confusions se situent entre *Honey* et *Mixed*, deux états biologiquement voisins caractérisés par des dépôts de miellat.
+
+---
+
+## 7. Galerie des Matrices de Confusion et Performances
+
+### Grille Comparative des 4 Algorithmes Deep Learning
+
+![Matrices de confusion comparatives](generation/benchmark/confusion_matrices_combined.png)
+
+---
+
+### ConvNeXt-Tiny (Champion — 92.89 %)
+
+| Matrice de Confusion | Métriques par Classe |
+|:---:|:---:|
+| ![Confusion ConvNeXt](generation/ConvNeXt-Tiny/confusion_matrix.png) | ![Métriques ConvNeXt](generation/ConvNeXt-Tiny/per_class_metrics.png) |
+
+---
+
+### MobileNetV3-ECA (Second — 90.89 %)
+
+| Matrice de Confusion | Métriques par Classe |
+|:---:|:---:|
+| ![Confusion MobileNet](generation/MobileNetV3-ECA/confusion_matrix.png) | ![Métriques MobileNet](generation/MobileNetV3-ECA/per_class_metrics.png) |
+
+---
+
+### Swin Transformer - Tiny (Troisième — 90.67 %)
+
+| Matrice de Confusion | Métriques par Classe |
+|:---:|:---:|
+| ![Confusion Swin-T](generation/Swin-T/confusion_matrix.png) | ![Métriques Swin-T](generation/Swin-T/per_class_metrics.png) |
+
+---
+
+### EfficientNet-V2-S (Quatrième — 88.89 %)
+
+| Matrice de Confusion | Métriques par Classe |
+|:---:|:---:|
+| ![Confusion EfficientNet](generation/EfficientNet-V2-S/confusion_matrix.png) | ![Métriques EfficientNet](generation/EfficientNet-V2-S/per_class_metrics.png) |
+
+---
+
+## 8. Organisation des Dossiers Générés
+
+Chaque modèle possède son sous-dossier dédié dans `generation/` :
+
+| Répertoire | Fichiers Générés | Rôle |
+|:---|:---|:---|
+| `generation/benchmark/` | `benchmark_global.png`, `benchmark_global.csv`, `confusion_matrices_combined.png`, `dataset_distribution.png`, `dataset_samples.png` | Graphiques de synthèse et données globales |
+| `generation/ConvNeXt-Tiny/` | `confusion_matrix.png`, `per_class_metrics.png`, `resultats.csv` | Résultats détaillés du champion |
+| `generation/MobileNetV3-ECA/` | `confusion_matrix.png`, `per_class_metrics.png`, `resultats.csv` | Résultats du modèle léger Edge-AI |
+| `generation/Swin-T/` | `confusion_matrix.png`, `per_class_metrics.png`, `resultats.csv` | Résultats du Vision Transformer |
+| `generation/EfficientNet-V2-S/` | `confusion_matrix.png`, `per_class_metrics.png`, `resultats.csv` | Résultats du CNN multi-échelle |
+
+---
+
+## 9. Guide d'Installation et Déploiement
+
+### Prérequis Système
+
+- Python : **3.10 ou 3.11**
+- Mémoire vive : 4 Go RAM minimum
+
+### 1. Installation des Dépendances
+
 ```bash
-# Cloner le dépôt ou naviguer dans le dossier du projet
-cd "projet ML"
+# Cloner le dépôt
+git clone https://github.com/MalakBenSlim/projet-ML.git
+cd projet-ML
 
-# Créer un environnement virtuel recommandé
-python -m venv venv
-venv\Scripts\activate      # Sur Windows
-# source venv/bin/activate # Sur Linux/macOS
-
-# Installer les dépendances certifiées
+# Installer les bibliothèques requises
 pip install -r requirements.txt
 ```
 
-### 2. Chargement du Jeu de Données en Python (PyTorch)
-Voici un exemple prêt à l'emploi gérant rigoureusement la correspondance des dossiers :
+### 2. Lancement des Applications
 
-```python
-import os
-import torch
-from torchvision import datasets, transforms
-from torch.utils.data import DataLoader
+- **Interface Web Interactive (Streamlit)** :
+  ```bash
+  # Double-clic sous Windows sur :
+  lancer_interface.bat
 
-# Chemin vers le dossier racine du dataset
-DATASET_PATH = r"Image dataset of infected date palm leaves\Image dataset of infected date palm leaves by dubas insects\Palm Leaves Dataset"
+  # Ou en console :
+  streamlit run app_streamlit.py
+  ```
+  Permet de tester n'importe quelle photo foliaire, de basculer entre les 4 modèles Deep Learning et d'obtenir le diagnostic et les recommandations en temps réel.
 
-# Transformations adaptées au Transfer Learning
-data_transforms = transforms.Compose([
-    transforms.Resize((224, 224)),
-    transforms.RandomHorizontalFlip(),
-    transforms.ToTensor(),
-    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-])
+- **Interface Desktop Locale (Tkinter)** :
+  ```bash
+  # Double-clic sous Windows sur :
+  lancer_interface_desktop.bat
+  ```
 
-# Chargement automatique via ImageFolder
-dataset = datasets.ImageFolder(root=DATASET_PATH, transform=data_transforms)
+### 3. Régénération Complète des Résultats
 
-# Dictionnaire de correspondance propre
-label_mapping = {
-    'Bug': 'Insectes Dubas',
-    'Dubas': 'Infestation Mixte (Mixed)',
-    'Healthy': 'Feuille Saine',
-    'Honey': 'Miellat Sécrété'
-}
+Pour réévaluer automatiquement les 4 modèles et régénérer tous les graphiques et CSV :
 
-print(f"✅ Total d'images chargées : {len(dataset)}")
-print(f"📁 Classes détectées : {dataset.class_to_idx}")
-for folder_name, idx in dataset.class_to_idx.items():
-    print(f"   [{idx}] Dossier '{folder_name}' -> Classe : {label_mapping.get(folder_name, folder_name)}")
+```bash
+python generate_all_outputs.py
 ```
 
 ---
 
-## 📚 9. Références Scientifiques & Citation
-
-Si vous exploitez ce projet ou ce jeu de données dans le cadre de vos travaux universitaires ou publications, merci de citer les sources officielles :
+## 10. Références Scientifiques
 
 ```bibtex
-@article{al2023image,
-  title={Image dataset of infected date palm leaves by dubas insects},
-  author={Al-Mahmood, Abdullah Mazin and Shahadi, Haider Ismael and Khayeat, Ali Retha Hasoon},
-  journal={Data in Brief},
-  volume={49},
-  pages={109371},
-  year={2023},
-  publisher={Elsevier},
-  doi={10.1016/j.dib.2023.109371}
+@article{liu2022convnet,
+  title   = {A ConvNet for the 2020s},
+  author  = {Liu, Zhuang and Mao, Hanzi and Wu, Chao-Yuan and Feichtenhofer, Christoph and Darrell, Trevor and Xie, Saining},
+  journal = {Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)},
+  pages   = {11976--11986},
+  year    = {2022}
 }
 
-@dataset{mazin2023dubas_mendeley,
-  title={Image dataset of infected date palm leaves by dubas insects},
-  author={Mazin, Abdullah and Almayaly, Haider},
-  year={2023},
-  publisher={Mendeley Data},
-  version={2},
-  doi={10.17632/2nh364p2bc.2}
+@article{howard2019searching,
+  title   = {Searching for MobileNetV3},
+  author  = {Howard, Andrew and Sandler, Mark and Chu, Grace and Chen, Liang-Chieh and Chen, Bo and Tan, Mingxing and Wang, Weijun and Zhu, Yukun and Pang, Ruoming and Vasudevan, Vijay and Le, Quoc V. and Adam, Hartwig},
+  journal = {IEEE/CVF International Conference on Computer Vision (ICCV)},
+  year    = {2019}
+}
+
+@article{liu2021swin,
+  title   = {Swin Transformer: Hierarchical Vision Transformer using Shifted Windows},
+  author  = {Liu, Ze and Lin, Yutong and Cao, Yue and Hu, Han and Wei, Yixiang and Zhang, Zheng and Lin, Stephen and Guo, Baining},
+  journal = {IEEE/CVF International Conference on Computer Vision (ICCV)},
+  pages   = {10012--10022},
+  year    = {2021}
+}
+
+@article{tan2021efficientnetv2,
+  title   = {EfficientNetV2: Smaller Models and Faster Training},
+  author  = {Tan, Mingxing and Le, Quoc V.},
+  journal = {International Conference on Machine Learning (ICML)},
+  year    = {2021}
 }
 ```
 
 ---
 
 <div align="center">
-  <sub>Projet universitaire réalisé dans le cadre des études en Intelligence Artificielle & Apprentissage Automatique.</sub><br/>
-  <sub>Distribué sous licence MIT. Tous droits de recherche réservés aux auteurs des publications d'origine.</sub>
+
+**Projet de Diagnostic Phytosanitaire du Palmier Dattier par Deep Learning**  
+*Vision Artificielle Appliquée à l'Agronomie Oasienne*
+
+[![GitHub Repo](https://img.shields.io/badge/GitHub-MalakBenSlim%2Fprojet--ML-181717?style=flat&logo=github)](https://github.com/MalakBenSlim/projet-ML)
+
 </div>

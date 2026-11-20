@@ -10,11 +10,13 @@ echo.
 
 cd /d "%~dp0"
 
-set "PY_EXE=C:\Users\malak\anaconda3\python.exe"
+set "PY_EXE="
+if exist "C:\Espressif\tools\python\python.exe" set "PY_EXE=C:\Espressif\tools\python\python.exe"
+if not defined PY_EXE if exist "C:\Users\CDA EXPERTISE\anaconda3\python.exe" set "PY_EXE=C:\Users\CDA EXPERTISE\anaconda3\python.exe"
+if not defined PY_EXE if exist "C:\Users\malak\anaconda3\python.exe" set "PY_EXE=C:\Users\malak\anaconda3\python.exe"
 
-if exist "%PY_EXE%" (
+if defined PY_EXE (
     echo [OK] Environnement Python detecte : %PY_EXE%
-    set "PATH=C:\Users\malak\anaconda3;C:\Users\malak\anaconda3\Scripts;%PATH%"
     "%PY_EXE%" -m streamlit run app_streamlit.py
     goto fin
 )
@@ -26,7 +28,7 @@ if %ERRORLEVEL% EQU 0 (
     goto fin
 )
 
-echo [ERREUR] Python est introuvable a l'emplacement C:\Users\malak\anaconda3\python.exe
+echo [ERREUR] Python est introuvable.
 pause
 
 :fin

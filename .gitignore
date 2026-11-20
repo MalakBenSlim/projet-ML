@@ -1,10 +1,22 @@
+# Python & Environnements
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
 .ipynb_checkpoints/
+.vscode/
+.idea/
+
+# Dataset volumineux du palmier dattier (3 000 images)
 Image dataset of infected date palm leaves/
+Image dataset of infected date palm leaves by dubas insects/
+Palm Leaves Dataset/
+*.zip
+*.tar.gz
+*.tar
+dataset_features.csv
+
+# Anciens répertoires résiduels
 assets/
 output_figures/
-dataset_features.csv
-*.jpg
-*.jpeg
-*.png
+_pdf_dump.txt
+_pdf_pages/
