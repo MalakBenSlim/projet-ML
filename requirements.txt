@@ -1,0 +1,29 @@
+# Environnement Machine Learning & Vision par Ordinateur
+# Projet de classification des feuilles de palmier dattier (Dubas)
+
+# Calcul numérique & manipulation de données
+numpy>=1.23.0
+pandas>=1.5.0
+scipy>=1.9.0
+
+# Traitement d'images & Vision par ordinateur
+opencv-python>=4.7.0
+pillow>=9.4.0
+scikit-image>=0.20.0
+
+# Apprentissage automatique classique (ML)
+scikit-learn>=1.2.0
+xgboost>=1.7.0
+
+# Apprentissage profond (Deep Learning)
+torch>=2.0.0
+torchvision>=0.15.0
+
+# Visualisation & Analyse
+matplotlib>=3.7.0
+seaborn>=0.12.0
+tqdm>=4.65.0
+
+# Intelligence Artificielle Explicable (XAI)
+grad-cam>=1.4.0
+shap>=0.42.0

@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+Image dataset of infected date palm leaves/
+assets/
+output_figures/
+dataset_features.csv
+*.jpg
+*.jpeg
+*.png
