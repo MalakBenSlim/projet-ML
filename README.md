@@ -368,20 +368,27 @@ pip install -r requirements.txt
 
 ### 2. Lancement des Applications
 
-- **Interface Web Interactive (Streamlit)** :
+- **Application Web Moderne (Vite.js + PyTorch + Chatbot Gemini) — *Recommandée*** :
   ```bash
   # Double-clic sous Windows sur :
   lancer_interface.bat
 
   # Ou en console :
-  streamlit run app_streamlit.py
+  python -m uvicorn api_server:app --port 8000
   ```
-  Permet de tester n'importe quelle photo foliaire, de basculer entre les 4 modèles Deep Learning et d'obtenir le diagnostic et les recommandations en temps réel.
+  Accédez à l'application dans votre navigateur :
+  - **`/home`** : Diagnostic d'images en direct (4 modèles Deep Learning, distribution de probabilités softmax, recommandations) + **Chatbot IA Gemini** spécialisé sur le palmier dattier et le projet.
+  - **`/dashboard`** : Configuration de la clé API Google Gemini, choix du modèle (1.5-flash / 2.0-flash / 1.5-pro), KPIs statistiques du projet et benchmark interactif.
 
 - **Interface Desktop Locale (Tkinter)** :
   ```bash
   # Double-clic sous Windows sur :
   lancer_interface_desktop.bat
+  ```
+
+- **Interface Legacy Streamlit** (optionnelle) :
+  ```bash
+  streamlit run app_streamlit.py
   ```
 
 ### 3. Régénération Complète des Résultats
