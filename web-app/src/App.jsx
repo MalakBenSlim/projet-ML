@@ -89,6 +89,19 @@ export default function App() {
   const [testingKey, setTestingKey] = useState(false);
   const [configStatus, setConfigStatus] = useState(null);
 
+  // Groq API configuration states
+  const [inputGroqKey, setInputGroqKey] = useState('');
+  const [showGroqKey, setShowGroqKey] = useState(false);
+  const [selectedGroqModel, setSelectedGroqModel] = useState('openai/gpt-oss-120b');
+  const [availableGroqModels, setAvailableGroqModels] = useState([
+    { id: 'openai/gpt-oss-120b', name: 'GPT-OSS 120B (Champion Groq LPU)', desc: 'Modèle 120B avec raisonnement' },
+    { id: 'openai/gpt-oss-20b', name: 'GPT-OSS 20B (Groq LPU Rapide)', desc: 'Inférence ultra-rapide' },
+    { id: 'qwen/qwen3.8-27b', name: 'Qwen 3.8 27B (Groq LPU)', desc: 'Modèle 27B équilibré' },
+    { id: 'allam-2-7b', name: 'Allam 2 7B (Arabe & Multilingue)', desc: 'Bilingue et adapté à la région' }
+  ]);
+  const [testingGroqKey, setTestingGroqKey] = useState(false);
+  const [groqStatus, setGroqStatus] = useState(null);
+
   // Initial data loading
   useEffect(() => {
     fetch('/api/models')
@@ -110,6 +123,15 @@ export default function App() {
       .catch(err => console.error("Erreur chargement dashboard:", err));
 
     fetchGeminiModels();
+
+    fetch('/api/groq/models')
+      .then(r => r.json())
+      .then(data => {
+        if (data.models && data.models.length > 0) {
+          setAvailableGroqModels(data.models);
+        }
+      })
+      .catch(() => {});
   }, []);
 
   // Check token on mount if on dashboard
@@ -125,6 +147,7 @@ export default function App() {
         .then(data => {
           setGeminiConfig(data);
           if (data.model) setSelectedGeminiModel(data.model);
+          if (data.groq_model) setSelectedGroqModel(data.groq_model);
         })
         .catch(() => {
           handleLogout();
@@ -365,13 +388,15 @@ export default function App() {
         },
         body: JSON.stringify({
           api_key: inputApiKey,
-          model: selectedGeminiModel
+          model: selectedGeminiModel,
+          groq_api_key: inputGroqKey,
+          groq_model: selectedGroqModel
         })
       });
       if (!res.ok) {
         throw new Error("Authentification requise ou session expirée");
       }
-      setConfigStatus({ ok: true, message: "Configuration Gemini enregistrée avec succès !" });
+      setConfigStatus({ ok: true, message: "Configuration des clés API enregistrée avec succès (chiffrement AES-256) !" });
       
       if (inputApiKey.trim()) {
         fetchGeminiModels(inputApiKey.trim());
@@ -380,12 +405,39 @@ export default function App() {
       const ref = await fetch('/api/config', {
         headers: { 'Authorization': `Bearer ${authToken}` }
       });
-      setGeminiConfig(await ref.json());
-      setInputApiKey('');
+      const updated = await ref.json();
+      setGeminiConfig(updated);
+      if (inputApiKey) setInputApiKey('');
+      if (inputGroqKey) setInputGroqKey('');
     } catch (e) {
       setConfigStatus({ ok: false, message: e.message });
     } finally {
       setSavingConfig(false);
+    }
+  };
+
+  // Test Groq Key (requires JWT)
+  const handleTestGroqKey = async () => {
+    setTestingGroqKey(true);
+    setGroqStatus(null);
+    try {
+      const res = await fetch('/api/config/test-groq', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`
+        },
+        body: JSON.stringify({
+          groq_api_key: inputGroqKey,
+          groq_model: selectedGroqModel
+        })
+      });
+      const data = await res.json();
+      setGroqStatus(data);
+    } catch (e) {
+      setGroqStatus({ ok: false, message: `Échec du test Groq : ${e.message}` });
+    } finally {
+      setTestingGroqKey(false);
     }
   };
 
@@ -820,121 +872,228 @@ export default function App() {
                   </button>
                 </div>
 
-                {/* SECTION 1: CONFIGURATION GEMINI API & MODÈLES CHARGÉS DYNAMIQUEMENT */}
+                {/* SECTION 1: CONFIGURATION DES MOTEURS IA (GEMINI 3.X & GROQ LPU) */}
                 <div className="card">
                   <div className="card-header">
                     <div className="card-title">
                       <Key className="text-amber-500" size={22} />
-                      <span>Configuration de l'API Google Gemini & Modèles Dynamiques</span>
+                      <span>Configuration Multi-Moteurs IA : Google Gemini & Groq (LPU)</span>
                     </div>
-                    <a 
-                      href="https://aistudio.google.com/app/apikey" 
-                      target="_blank" 
-                      rel="noreferrer"
-                      className="btn-secondary"
-                      style={{ textDecoration: 'none', fontSize: '0.8rem' }}
-                    >
-                      <span>Obtenir une clé Gemini gratuite</span>
-                      <ExternalLink size={14} />
-                    </a>
+                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                      <a 
+                        href="https://aistudio.google.com/app/apikey" 
+                        target="_blank" 
+                        rel="noreferrer"
+                        className="btn-secondary"
+                        style={{ textDecoration: 'none', fontSize: '0.78rem' }}
+                      >
+                        <span>Clé Gemini (Google)</span>
+                        <ExternalLink size={13} />
+                      </a>
+                      <a 
+                        href="https://console.groq.com/keys" 
+                        target="_blank" 
+                        rel="noreferrer"
+                        className="btn-secondary"
+                        style={{ textDecoration: 'none', fontSize: '0.78rem', background: 'rgba(245, 158, 11, 0.08)', color: '#d97706', borderColor: 'rgba(245, 158, 11, 0.25)' }}
+                      >
+                        <span>Clé Groq (Console)</span>
+                        <ExternalLink size={13} />
+                      </a>
+                    </div>
                   </div>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '2rem' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 1fr', gap: '2rem' }}>
                     <form onSubmit={handleSaveConfig} className="config-form">
-                      <div className="form-group">
-                        <label className="form-label">Clé API Google Gemini :</label>
-                        <div style={{ position: 'relative' }}>
-                          <input 
-                            type={showApiKey ? 'text' : 'password'}
-                            className="form-input"
-                            style={{ width: '100%', paddingRight: '40px' }}
-                            placeholder={geminiConfig.has_key ? `Clé enregistrée (${geminiConfig.masked_key})` : "Collez votre clé API AIzaSy..."}
-                            value={inputApiKey}
-                            onChange={(e) => setInputApiKey(e.target.value)}
-                          />
-                          <button
-                            type="button"
-                            onClick={() => setShowApiKey(!showApiKey)}
-                            style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'transparent', color: '#64748b' }}
-                          >
-                            {showApiKey ? <EyeOff size={18} /> : <Eye size={18} />}
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* Modèles Gemini chargés directement depuis la clé API */}
-                      <div className="form-group">
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <label className="form-label">Modèle Gemini Actif :</label>
-                          <span style={{ fontSize: '0.72rem', color: modelsSourceApi ? '#059669' : '#64748b', fontWeight: 600 }}>
-                            {modelsSourceApi ? "✓ Modèles chargés depuis l'API Google" : "Modèles standards"}
+                      {/* --- BLOC 1 : GOOGLE GEMINI --- */}
+                      <div style={{ padding: '1rem', background: 'var(--bg-main)', borderRadius: '12px', border: '1px solid var(--border)' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.65rem' }}>
+                          <span style={{ fontWeight: 800, fontSize: '0.9rem', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                            <span>✨</span> 1. Moteur Principal : Google Gemini
+                          </span>
+                          <span className={`badge ${geminiConfig.has_key ? 'badge-success' : 'badge-warning'}`} style={{ fontSize: '0.7rem' }}>
+                            {geminiConfig.has_key ? `● ${geminiConfig.keys_count || 1} clé(s) active(s)` : 'Non configurée'}
                           </span>
                         </div>
-                        <select 
-                          className="form-input"
-                          value={selectedGeminiModel}
-                          onChange={(e) => setSelectedGeminiModel(e.target.value)}
-                          disabled={loadingGeminiModels}
-                        >
-                          {availableGeminiModels.map(m => (
-                            <option key={m.id} value={m.id}>
-                              {m.name} ({m.id})
-                            </option>
-                          ))}
-                        </select>
+
+                        <div className="form-group" style={{ marginBottom: '0.75rem' }}>
+                          <label className="form-label" style={{ fontSize: '0.8rem' }}>Clé API Google Gemini :</label>
+                          <div style={{ position: 'relative' }}>
+                            <input 
+                              type={showApiKey ? 'text' : 'password'}
+                              className="form-input"
+                              style={{ width: '100%', paddingRight: '40px', fontSize: '0.88rem' }}
+                              placeholder={geminiConfig.has_key ? `Clé enregistrée (${geminiConfig.masked_key})` : "Collez votre clé API AIzaSy..."}
+                              value={inputApiKey}
+                              onChange={(e) => setInputApiKey(e.target.value)}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setShowApiKey(!showApiKey)}
+                              style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'transparent', color: '#64748b' }}
+                            >
+                              {showApiKey ? <EyeOff size={16} /> : <Eye size={16} />}
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="form-group">
+                          <label className="form-label" style={{ fontSize: '0.8rem' }}>Modèle Gemini Préféré (Cascade 3.6 → 3.7 → 3.8) :</label>
+                          <select 
+                            className="form-input"
+                            style={{ fontSize: '0.88rem' }}
+                            value={selectedGeminiModel}
+                            onChange={(e) => setSelectedGeminiModel(e.target.value)}
+                            disabled={loadingGeminiModels}
+                          >
+                            {availableGeminiModels.map(m => (
+                              <option key={m.id} value={m.id}>
+                                {m.name} ({m.id})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
                       </div>
 
-                      <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.5rem', flexWrap: 'wrap' }}>
+                      {/* --- BLOC 2 : GROQ LPU (REPLI ULTRA-RAPIDE) --- */}
+                      <div style={{ padding: '1rem', background: 'var(--bg-main)', borderRadius: '12px', border: '1px solid var(--border)' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.65rem' }}>
+                          <span style={{ fontWeight: 800, fontSize: '0.9rem', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                            <span>⚡</span> 2. Moteur d'Inférence Groq (LPU Ultra-Rapide)
+                          </span>
+                          <span className={`badge ${geminiConfig.groq_has_key ? 'badge-success' : 'badge-warning'}`} style={{ fontSize: '0.7rem' }}>
+                            {geminiConfig.groq_has_key ? `● ${geminiConfig.groq_keys_count || 1} clé(s) Groq active(s)` : 'Optionnel'}
+                          </span>
+                        </div>
+
+                        <div className="form-group" style={{ marginBottom: '0.75rem' }}>
+                          <label className="form-label" style={{ fontSize: '0.8rem' }}>Clé API Groq Cloud :</label>
+                          <div style={{ position: 'relative' }}>
+                            <input 
+                              type={showGroqKey ? 'text' : 'password'}
+                              className="form-input"
+                              style={{ width: '100%', paddingRight: '40px', fontSize: '0.88rem' }}
+                              placeholder={geminiConfig.groq_has_key ? `Clé enregistrée (${geminiConfig.groq_masked_key})` : "Collez votre clé Groq gsk_..."}
+                              value={inputGroqKey}
+                              onChange={(e) => setInputGroqKey(e.target.value)}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setShowGroqKey(!showGroqKey)}
+                              style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'transparent', color: '#64748b' }}
+                            >
+                              {showGroqKey ? <EyeOff size={16} /> : <Eye size={16} />}
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="form-group">
+                          <label className="form-label" style={{ fontSize: '0.8rem' }}>Modèle Groq :</label>
+                          <select 
+                            className="form-input"
+                            style={{ fontSize: '0.88rem' }}
+                            value={selectedGroqModel}
+                            onChange={(e) => setSelectedGroqModel(e.target.value)}
+                          >
+                            {availableGroqModels.map(m => (
+                              <option key={m.id} value={m.id}>
+                                {m.name} ({m.id})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+
+                      {/* --- BOUTONS D'ACTION --- */}
+                      <div style={{ display: 'flex', gap: '0.65rem', marginTop: '0.25rem', flexWrap: 'wrap' }}>
                         <button type="submit" className="btn-primary" style={{ width: 'auto', padding: '0.65rem 1.4rem' }} disabled={savingConfig}>
-                          {savingConfig ? 'Enregistrement...' : 'Enregistrer la Clé & Modèle'}
+                          {savingConfig ? 'Enregistrement...' : 'Enregistrer la Configuration'}
                         </button>
                         <button 
                           type="button" 
                           className="btn-secondary" 
                           onClick={handleTestKey}
                           disabled={testingKey || (!inputApiKey && !geminiConfig.has_key)}
+                          title="Teste la connexion aux modèles Gemini"
                         >
-                          {testingKey ? <RefreshCw className="animate-spin" size={16} /> : <ShieldCheck size={16} />}
-                          <span>Tester la Clé</span>
+                          {testingKey ? <RefreshCw className="animate-spin" size={15} /> : <ShieldCheck size={15} />}
+                          <span>Tester Gemini</span>
+                        </button>
+                        <button 
+                          type="button" 
+                          className="btn-secondary" 
+                          onClick={handleTestGroqKey}
+                          disabled={testingGroqKey || (!inputGroqKey && !geminiConfig.groq_has_key)}
+                          title="Teste la connexion à l'API Groq"
+                        >
+                          {testingGroqKey ? <RefreshCw className="animate-spin" size={15} /> : <Sparkles size={15} color="#d97706" />}
+                          <span>Tester Groq</span>
                         </button>
                         <button 
                           type="button" 
                           className="btn-secondary" 
                           onClick={() => fetchGeminiModels(inputApiKey.trim() || undefined)}
                           disabled={loadingGeminiModels}
-                          title="Interroge l'API Google pour rafraîchir la liste des modèles disponibles"
+                          title="Interroge l'API Google pour rafraîchir la liste des modèles"
                         >
-                          <RefreshCw className={loadingGeminiModels ? "animate-spin" : ""} size={15} />
-                          <span>Recharger Modèles</span>
+                          <RefreshCw className={loadingGeminiModels ? "animate-spin" : ""} size={14} />
+                          <span>Modèles Google</span>
                         </button>
                       </div>
 
                       {configStatus && (
                         <div style={{
                           padding: '0.75rem',
-                          borderRadius: '8px',
-                          background: configStatus.ok ? '#ecfdf5' : '#fef2f2',
-                          border: `1px solid ${configStatus.ok ? '#a7f3d0' : '#fecaca'}`,
-                          color: configStatus.ok ? '#065f46' : '#991b1b',
+                          borderRadius: '10px',
+                          background: configStatus.ok ? 'rgba(16, 185, 129, 0.12)' : 'rgba(239, 68, 68, 0.12)',
+                          border: `1px solid ${configStatus.ok ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`,
+                          color: configStatus.ok ? '#059669' : '#dc2626',
                           fontSize: '0.85rem'
                         }}>
                           {configStatus.message}
                         </div>
                       )}
+
+                      {groqStatus && (
+                        <div style={{
+                          padding: '0.75rem',
+                          borderRadius: '10px',
+                          background: groqStatus.ok ? 'rgba(245, 158, 11, 0.12)' : 'rgba(239, 68, 68, 0.12)',
+                          border: `1px solid ${groqStatus.ok ? 'rgba(245, 158, 11, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`,
+                          color: groqStatus.ok ? '#d97706' : '#dc2626',
+                          fontSize: '0.85rem'
+                        }}>
+                          {groqStatus.message}
+                        </div>
+                      )}
                     </form>
 
-                    {/* Explication du chargement dynamique */}
-                    <div style={{ background: '#f8fafc', padding: '1.25rem', borderRadius: '12px', border: '1px solid #e2e8f0', fontSize: '0.85rem' }}>
-                      <div style={{ fontWeight: 800, color: '#0f172a', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                        <Bot className="text-emerald-600" size={18} />
-                        <span>Chargement Dynamique des Modèles Gemini</span>
+                    {/* Explication de l'architecture Hybride Silencieuse */}
+                    <div style={{ background: 'var(--bg-main)', padding: '1.5rem', borderRadius: '16px', border: '1px solid var(--border)', fontSize: '0.85rem', display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+                      <div style={{ fontWeight: 800, color: 'var(--text-main)', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <Bot className="text-emerald-600" size={20} />
+                        <span>Architecture IA Hybride & Silencieuse</span>
                       </div>
-                      <p style={{ color: '#475569', marginBottom: '0.5rem', lineHeight: 1.4 }}>
-                        Dès qu'une clé API est enregistrée, notre backend interroge directement l'endpoint <code>v1beta/models</code> de Google pour lister <strong>les modèles réels autorisés</strong> sur votre compte.
+                      
+                      <p style={{ color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                        PalmVision combine désormais <strong>Google Gemini</strong> et <strong>Groq Cloud (LPU)</strong> dans une boucle d'exécution sans interruption :
                       </p>
-                      <p style={{ color: '#64748b', fontSize: '0.8rem', lineHeight: 1.4 }}>
-                        L'assistant est paramétré pour fournir des réponses courtes, directes et professionnelles.
-                      </p>
+
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', fontSize: '0.8rem' }}>
+                        <div style={{ padding: '0.55rem 0.75rem', background: 'var(--bg-card)', borderRadius: '8px', borderLeft: '3px solid #10b981' }}>
+                          <strong>Cascade Principale :</strong> Gemini 3.6 Flash → 3.7 Flash → 3.8 Flash.
+                        </div>
+                        <div style={{ padding: '0.55rem 0.75rem', background: 'var(--bg-card)', borderRadius: '8px', borderLeft: '3px solid #f59e0b' }}>
+                          <strong>Repli Instantané Groq :</strong> Llama 3.3 70B & Llama 3.1 8B activés automatiquement si Gemini subit un timeout ou un pic de charge.
+                        </div>
+                        <div style={{ padding: '0.55rem 0.75rem', background: 'var(--bg-card)', borderRadius: '8px', borderLeft: '3px solid #0071e3' }}>
+                          <strong>Chiffrement AES-256 :</strong> Toutes les clés sont chiffrées en local avec Fernet et déchiffrées une seule fois en mémoire cache vive (0 ms).
+                        </div>
+                      </div>
+
+                      <div style={{ marginTop: 'auto', paddingTop: '0.75rem', borderTop: '1px solid var(--border)', fontSize: '0.76rem', color: 'var(--text-light)' }}>
+                        🔒 Zéro transmission de clés en clair • Rotation multi-clés sur Quota Reached
+                      </div>
                     </div>
                   </div>
                 </div>

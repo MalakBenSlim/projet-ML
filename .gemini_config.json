@@ -1,0 +1,13 @@
+{
+  "encrypted_keys": [
+    "gAAAAABrArHTCd8LoVcojz3YXmnw6HoRjkN8qKES5QSXSFii_CT-vE7JYOcr1hDkA96glMyRtTsW0_qQi_xz6ijZavUpihAX43y597ble3OjBSd8MeUjICkZ2r3Ry6DzhcfwcXNSoAB_lAQ3rXFWFPGNrfklPls1yQ=="
+  ],
+  "model": "gemini-3.6-flash",
+  "encrypted_groq_keys": [
+    "gAAAAABrAvvQZANQi6IcHYxOkPEVhs41yjYP9HkZ5WfUnWp8LAscOB2PrkaSqfaXFEMGzZ_8Wc2Row7uA59ZFjUcG9zalk3lwe2QtquKnelBJXlldV8-8u_e87oThm5UVKzflQwCCMna4ZrUaWpagKekRsaPGBKBYA=="
+  ],
+  "groq_model": "llama-3.3-70b-versatile",
+  "temperature": 0.2,
+  "max_output_tokens": 1024,
+  "encryption": "AES-256 (Fernet)"
+}

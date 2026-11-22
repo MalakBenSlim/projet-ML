@@ -9,7 +9,6 @@ __pycache__/
 # Node & Frontend Vite
 web-app/node_modules/
 node_modules/
-.gemini_config.json
 
 # Dataset volumineux du palmier dattier (3 000 images)
 Image dataset of infected date palm leaves/

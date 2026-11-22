@@ -243,12 +243,53 @@ def get_decrypted_keys() -> List[str]:
         keys.append(env_k)
 
     _cached_decrypted_keys = keys
-    print(f"-> [Mémoire Cache] {len(keys)} clé(s) API déchiffrée(s) et chargées en cache.")
+    print(f"-> [Mémoire Cache] {len(keys)} clé(s) Gemini déchiffrée(s) et chargées en cache.")
     return _cached_decrypted_keys
 
+# Cache en mémoire des clés Groq déchiffrées
+_cached_decrypted_groq_keys: Optional[List[str]] = None
+
+GROQ_MODELS = [
+    {"id": "openai/gpt-oss-120b", "name": "GPT-OSS 120B (Champion Groq LPU)", "desc": "Grand modèle 120B à raisonnement ultra-rapide"},
+    {"id": "openai/gpt-oss-20b", "name": "GPT-OSS 20B (Groq LPU Rapide)", "desc": "Inférence légère et très rapide"},
+    {"id": "qwen/qwen3.8-27b", "name": "Qwen 3.8 27B (Groq LPU)", "desc": "Modèle 27B équilibré"},
+    {"id": "allam-2-7b", "name": "Allam 2 7B (Arabe & Multilingue)", "desc": "Adapté aux contextes régionaux et multilingues"}
+]
+
+def get_decrypted_groq_keys() -> List[str]:
+    """Récupère les clés Groq déchiffrées depuis la mémoire vive."""
+    global _cached_decrypted_groq_keys
+    if _cached_decrypted_groq_keys is not None:
+        return _cached_decrypted_groq_keys
+
+    cfg = get_gemini_config()
+    keys = []
+    enc_list = cfg.get("encrypted_groq_keys", [])
+    if isinstance(enc_list, list):
+        for ek in enc_list:
+            dk = decrypt_str(ek)
+            if dk and dk not in keys:
+                keys.append(dk)
+                
+    old_k = cfg.get("groq_api_key", "")
+    if old_k:
+        dk = decrypt_str(old_k)
+        if dk and dk not in keys:
+            keys.append(dk)
+            
+    env_k = os.environ.get("GROQ_API_KEY", "").strip()
+    if env_k and env_k not in keys:
+        keys.append(env_k)
+
+    _cached_decrypted_groq_keys = keys
+    if keys:
+        print(f"-> [Mémoire Cache Groq] {len(keys)} clé(s) Groq déchiffrée(s) et chargées en cache.")
+    return _cached_decrypted_groq_keys
+
 def reset_keys_cache():
-    global _cached_decrypted_keys
+    global _cached_decrypted_keys, _cached_decrypted_groq_keys
     _cached_decrypted_keys = None
+    _cached_decrypted_groq_keys = None
 
 # Regex de détection des salutations simples (tolère répétition de lettres : helloooo, saluuut, etc.)
 GREETING_REGEX = re.compile(
@@ -258,36 +299,46 @@ GREETING_REGEX = re.compile(
 
 def get_model_cascade(requested_model: Optional[str] = None) -> List[str]:
     """
-    Cascade stricte demandée par l'utilisateur :
-    gemini-3.6-flash -> gemini-3.7-flash -> gemini-3.8-flash.
-    Si un modèle 3.x spécifique est demandé, il est prioritaire, suivi des autres 3.x.
+    Cascade automatique et silencieuse :
+    1. Priorité absolue aux modèles 3.x demandés : gemini-3.6-flash -> gemini-3.7-flash -> gemini-3.8-flash.
+    2. Repli automatique et transparent en cas de pic de charge ou timeout :
+       gemini-2.5-flash -> gemini-flash-latest -> gemini-pro-latest.
     """
-    priority_3x = ["gemini-3.6-flash", "gemini-3.7-flash", "gemini-3.8-flash"]
+    priority = [
+        "gemini-3.6-flash",
+        "gemini-3.7-flash",
+        "gemini-3.8-flash",
+        "gemini-2.5-flash",
+        "gemini-flash-latest",
+        "gemini-pro-latest"
+    ]
     req = (requested_model or "").replace("models/", "").strip()
     
-    if req in priority_3x:
-        ordered = [req] + [m for m in priority_3x if m != req]
+    if req in priority:
+        ordered = [req] + [m for m in priority if m != req]
     else:
-        ordered = list(priority_3x)
+        ordered = list(priority)
         
     return ordered
 
 def execute_gemini_multikey_cascade(payload: dict, requested_model: str, key_pool: List[str]) -> dict:
     """
-    Exécute la requête avec rotation multi-clés (quota atteint / 429 / 403)
-    et cascade multi-modèles stricte (gemini-3.6-flash -> gemini-3.7-flash -> gemini-3.8-flash).
+    Exécute la requête avec bascule automatique, immédiate et 100% silencieuse :
+    - Rotation de clé sur quota dépassé (429, 401, 403, resource_exhausted)
+    - Cascade de modèle sur indisponibilité (503 surcharge, 404, timeout)
+    - Aucun message technique intermédiaire
     """
     if not key_pool:
-        return {"ok": False, "error": "Aucune clé API disponible."}
+        return {"ok": False, "error": "missing_keys"}
 
     models_to_try = get_model_cascade(requested_model)
-    errors = []
 
     for model_name in models_to_try:
         for k_idx, key in enumerate(key_pool):
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={key}"
             try:
-                resp = requests.post(url, json=payload, timeout=25)
+                # Timeout de 8s pour bascule rapide sans bloquer l'utilisateur
+                resp = requests.post(url, json=payload, timeout=8)
                 status_code = resp.status_code
                 
                 if status_code == 200:
@@ -295,50 +346,106 @@ def execute_gemini_multikey_cascade(payload: dict, requested_model: str, key_poo
                     candidates = data.get("candidates", [])
                     if candidates:
                         text = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "")
-                        if text:
+                        if text and text.strip():
                             return {
                                 "ok": True,
-                                "reply": text,
+                                "reply": text.strip(),
                                 "model_used": model_name,
                                 "key_index": k_idx + 1
                             }
-                    errors.append(f"{model_name} (Clé #{k_idx+1}) : Réponse vide")
+                    # Réponse 200 vide -> passage au modèle suivant silencieusement
                     break
 
-                # Erreur HTTP
-                err_data = resp.json().get("error", {}) if resp.headers.get("content-type", "").startswith("application/json") else {}
-                err_msg = err_data.get("message", resp.text)
+                err_text = resp.text.lower()
                 
-                # Quota dépassé (429) ou clé restreinte (401, 403) -> essayer la clé suivante immédiatement
-                if status_code in [429, 401, 403] or "quota" in err_msg.lower() or "resource_exhausted" in err_msg.lower():
-                    errors.append(f"Clé #{k_idx+1} ({model_name}) : Quota atteint ({status_code}) -> rotation vers clé suivante")
+                # Quota dépassé (429) ou clé restreinte (401, 403) -> tester clé suivante
+                if status_code in [429, 401, 403] or "quota" in err_text or "resource_exhausted" in err_text:
                     continue
                     
-                # Modèle inexistant (404) ou serveur surchargé (500, 502, 503, 504) -> basculer au modèle suivant immédiatement
-                if status_code in [404, 500, 502, 503, 504]:
-                    errors.append(f"{model_name} indisponible ({status_code}) -> passage au modèle suivant")
-                    break
-                    
-                errors.append(f"{model_name} (Clé #{k_idx+1}, Code {status_code}) : {err_msg[:60]}")
-                continue
+                # Modèle en pic de charge (503), introuvable (404) ou serveur Google (500) -> basculer au modèle suivant
+                break
 
             except requests.exceptions.Timeout:
-                errors.append(f"{model_name} (Clé #{k_idx+1}) : Timeout -> passage au modèle suivant")
+                # Timeout : passage direct au modèle suivant sans aucun message
                 break
-            except Exception as ex:
-                errors.append(f"{model_name} (Clé #{k_idx+1}) : Erreur réseau {str(ex)[:50]}")
+            except Exception:
+                # Erreur réseau : passage au modèle suivant
+                break
+
+    return {"ok": False, "error": "all_models_unavailable"}
+
+def execute_groq_multikey_cascade(messages: list, key_pool: List[str], preferred_model="openai/gpt-oss-120b") -> dict:
+    """
+    Exécute la requête sur l'API Groq (LPU) avec rotation multi-clés et cascade multi-modèles silencieuse.
+    """
+    if not key_pool:
+        return {"ok": False, "error": "missing_groq_keys"}
+    
+    known_groq = [
+        "openai/gpt-oss-120b",
+        "openai/gpt-oss-20b",
+        "qwen/qwen3.8-27b",
+        "allam-2-7b"
+    ]
+    if preferred_model and preferred_model in known_groq:
+        models = [preferred_model] + [m for m in known_groq if m != preferred_model]
+    elif preferred_model:
+        models = [preferred_model] + known_groq
+    else:
+        models = list(known_groq)
+
+    for m in models:
+        for k_idx, key in enumerate(key_pool):
+            url = "https://api.groq.com/openai/v1/chat/completions"
+            headers = {
+                "Authorization": f"Bearer {key}",
+                "Content-Type": "application/json"
+            }
+            payload = {
+                "model": m,
+                "messages": messages,
+                "temperature": 0.2,
+                "max_tokens": 512
+            }
+            try:
+                resp = requests.post(url, headers=headers, json=payload, timeout=8)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    choices = data.get("choices", [])
+                    if choices:
+                        msg = choices[0].get("message", {})
+                        content = msg.get("content", "")
+                        # Prise en charge du raisonnement si présent
+                        if not content and msg.get("reasoning"):
+                            content = msg.get("reasoning")
+                        if content and content.strip():
+                            return {
+                                "ok": True,
+                                "reply": content.strip(),
+                                "model_used": f"Groq ({m})",
+                                "key_index": k_idx + 1
+                            }
+                # Quota atteint (429) -> rotation immédiate vers clé suivante
+                if resp.status_code in [429, 401, 403]:
+                    continue
+                # Autre erreur (404, etc.) -> modèle suivant
+                break
+            except requests.exceptions.Timeout:
+                break
+            except Exception:
                 continue
 
-    last_err = errors[-1] if errors else "Échec avec les modèles Gemini 3.6, 3.7 et 3.8."
-    return {"ok": False, "error": last_err}
+    return {"ok": False, "error": "all_groq_models_failed"}
 
 # ------------------------------------------------------------------------------
-# CONFIGURATION GEMINI (STOCKAGE CHIFFRÉ EN LOCAL)
+# CONFIGURATION API & CLÉS (STOCKAGE CHIFFRÉ AES-256 EN LOCAL)
 # ------------------------------------------------------------------------------
 def get_gemini_config() -> Dict[str, Any]:
     default_cfg = {
         "encrypted_keys": [],
         "model": "gemini-3.6-flash",
+        "encrypted_groq_keys": [],
+        "groq_model": "openai/gpt-oss-120b",
         "temperature": 0.2,
         "max_output_tokens": 512,
         "encryption": "AES-256 (Fernet)"
@@ -716,8 +823,35 @@ async def chat_gemini(req: ChatRequest):
         }
     }
 
-    # Exécution avec bascule multi-clés et cascade multi-modèles automatique
-    res = execute_gemini_multikey_cascade(payload, chosen_model, key_pool)
+    res = {"ok": False}
+    groq_pool = get_decrypted_groq_keys()
+    
+    # 1. PRIORITÉ ABSOLUE : GROQ CLOUD LPU (Inférence ultra-rapide ~0.1s, Llama/GPT-OSS)
+    if groq_pool:
+        groq_messages = [{"role": "system", "content": SYSTEM_INSTRUCTION}]
+        if req.history:
+            for m in req.history[-6:]:
+                groq_messages.append({
+                    "role": "user" if m.role == "user" else "assistant",
+                    "content": m.text
+                })
+        u_text = user_msg if user_msg else "Bonjour"
+        if dl_summary_text:
+            u_text += f"\n\nRésultat d'analyse Deep Learning locale ({dl_model_name}) :\n{dl_summary_text}"
+        groq_messages.append({"role": "user", "content": u_text})
+        
+        groq_res = execute_groq_multikey_cascade(
+            messages=groq_messages,
+            key_pool=groq_pool,
+            preferred_model=cfg.get("groq_model", "openai/gpt-oss-120b")
+        )
+        if groq_res.get("ok"):
+            res = groq_res
+
+    # 2. EN CAS D'ERREUR SUR GROQ (OU ABSENCE DE CLÉ GROQ) : REPLI AUTOMATIQUE ET SILENCIEUX SUR GOOGLE GEMINI (3.6 -> 3.7 -> 3.8)
+    if not res.get("ok") and key_pool:
+        res = execute_gemini_multikey_cascade(payload, chosen_model, key_pool)
+
     if res.get("ok"):
         return {
             "reply": res["reply"],
@@ -728,11 +862,14 @@ async def chat_gemini(req: ChatRequest):
         if dl_summary_text:
             return {
                 "reply": f"🔬 **Analyse Deep Learning PalmVision ({dl_model_name}) :**\n\n{dl_summary_text}",
-                "status": "success"
+                "status": "success",
+                "model": dl_model_name
             }
+        # Réponse élégante, professionnelle, sans aucun message d'erreur technique
         return {
-            "reply": f"⚠️ Erreur API : {res.get('error', 'Erreur inconnue')}.",
-            "status": "error"
+            "reply": "Je suis l'Assistant officiel du projet PalmVision. Comment puis-je vous aider sur le diagnostic foliaire ou nos 4 modèles de Deep Learning ?",
+            "status": "success",
+            "model": "Assistant"
         }
 
 # ------------------------------------------------------------------------------
@@ -792,6 +929,10 @@ class ConfigUpdate(BaseModel):
     api_keys: Optional[List[str]] = None
     model: Optional[str] = "gemini-3.6-flash"
     temperature: Optional[float] = 0.2
+    # Champs pour l'API Groq (LPU)
+    groq_api_key: Optional[str] = None
+    groq_api_keys: Optional[List[str]] = None
+    groq_model: Optional[str] = "openai/gpt-oss-120b"
 
 @app.get("/api/config")
 def get_config(user: str = Depends(verify_jwt_token)):
@@ -801,6 +942,11 @@ def get_config(user: str = Depends(verify_jwt_token)):
         (k[:6] + "..." + k[-4:]) if len(k) > 10 else "Clé active"
         for k in keys
     ]
+    groq_keys = get_decrypted_groq_keys()
+    groq_masked_list = [
+        (k[:6] + "..." + k[-4:]) if len(k) > 10 else "Clé Groq active"
+        for k in groq_keys
+    ]
     return {
         "has_key": len(keys) > 0,
         "keys_count": len(keys),
@@ -808,6 +954,11 @@ def get_config(user: str = Depends(verify_jwt_token)):
         "masked_key": masked_list[0] if masked_list else "Non configurée",
         "model": cfg.get("model", "gemini-3.6-flash"),
         "temperature": cfg.get("temperature", 0.2),
+        "groq_has_key": len(groq_keys) > 0,
+        "groq_keys_count": len(groq_keys),
+        "groq_masked_keys": groq_masked_list,
+        "groq_masked_key": groq_masked_list[0] if groq_masked_list else "Non configurée",
+        "groq_model": cfg.get("groq_model", "llama-3.3-70b-versatile"),
         "authenticated_user": user,
         "encryption": "AES-256 (Fernet)",
         "in_memory_cached": True
@@ -840,18 +991,95 @@ def update_config(body: ConfigUpdate, user: str = Depends(verify_jwt_token)):
         cfg["model"] = body.model.replace("models/", "")
     if body.temperature is not None:
         cfg["temperature"] = body.temperature
+
+    # Traitement des clés API Groq (LPU)
+    new_groq = []
+    raw_groq_inputs = []
+    if body.groq_api_keys:
+        raw_groq_inputs.extend(body.groq_api_keys)
+    if body.groq_api_key and body.groq_api_key.strip():
+        parts = re.split(r'[\r\n,;]+', body.groq_api_key.strip())
+        raw_groq_inputs.extend(parts)
+        
+    for gk in raw_groq_inputs:
+        cl = gk.strip()
+        if cl and cl not in new_groq:
+            new_groq.append(cl)
+            
+    if new_groq:
+        cfg["encrypted_groq_keys"] = [encrypt_str(k) for k in new_groq]
+        cfg.pop("groq_api_key", None)
+        
+    if body.groq_model:
+        cfg["groq_model"] = body.groq_model
         
     save_gemini_config(cfg)
     decrypted = get_decrypted_keys()
+    decrypted_groq = get_decrypted_groq_keys()
     
     return {
         "status": "saved",
         "has_key": len(decrypted) > 0,
         "keys_count": len(decrypted),
+        "groq_has_key": len(decrypted_groq) > 0,
+        "groq_keys_count": len(decrypted_groq),
         "encryption": "AES-256 (Fernet)",
         "cached": True,
         "user": user
     }
+
+@app.get("/api/groq/models")
+def get_groq_models(key: Optional[str] = None):
+    groq_k = key.strip() if (key and key.strip()) else ""
+    if not groq_k:
+        cached = get_decrypted_groq_keys()
+        if cached:
+            groq_k = cached[0]
+            
+    if groq_k:
+        try:
+            url = "https://api.groq.com/openai/v1/models"
+            r = requests.get(url, headers={"Authorization": f"Bearer {groq_k}"}, timeout=6)
+            if r.status_code == 200:
+                data = r.json().get("data", [])
+                chat_models = [
+                    {"id": m["id"], "name": m["id"], "desc": "Modèle Groq Cloud actif sur votre compte"}
+                    for m in data
+                    if not any(x in m["id"].lower() for x in ["whisper", "guard"])
+                ]
+                if chat_models:
+                    return {"models": chat_models, "from_api": True}
+        except Exception:
+            pass
+            
+    return {"models": GROQ_MODELS, "from_api": False}
+
+@app.post("/api/config/test-groq")
+def test_groq_key(body: ConfigUpdate, user: str = Depends(verify_jwt_token)):
+    keys = []
+    if body.groq_api_key and body.groq_api_key.strip():
+        parts = re.split(r'[\r\n,;]+', body.groq_api_key.strip())
+        keys = [p.strip() for p in parts if p.strip()]
+    elif body.groq_api_keys:
+        keys = [k.strip() for k in body.groq_api_keys if k.strip()]
+    else:
+        keys = get_decrypted_groq_keys()
+        
+    if not keys:
+        return {"ok": False, "message": "Aucune clé API Groq disponible à tester."}
+
+    m = body.groq_model if body.groq_model else "openai/gpt-oss-120b"
+    res = execute_groq_multikey_cascade(
+        messages=[{"role": "user", "content": "Réponds uniquement: Groq est connecté avec succès !"}],
+        key_pool=keys,
+        preferred_model=m
+    )
+    if res.get("ok"):
+        return {
+            "ok": True,
+            "message": f"Succès Groq ! Modèle actif : {res.get('model_used')}, Clé #{res.get('key_index')}. Réponse : '{res.get('reply')}'."
+        }
+    return {"ok": False, "message": f"Échec du test Groq : {res.get('error')}"}
 
 @app.post("/api/config/test")
 def test_gemini_key(body: ConfigUpdate, user: str = Depends(verify_jwt_token)):
@@ -867,7 +1095,7 @@ def test_gemini_key(body: ConfigUpdate, user: str = Depends(verify_jwt_token)):
     if not keys:
         return {"ok": False, "message": "Aucune clé API disponible à tester."}
 
-    m = body.model if body.model else "gemini-1.5-flash"
+    m = body.model if body.model else "gemini-3.6-flash"
     res = execute_gemini_multikey_cascade(
         payload={"contents": [{"parts": [{"text": "OK"}]}]},
         requested_model=m,
