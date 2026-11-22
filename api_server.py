@@ -14,6 +14,8 @@ Fournit :
 import os
 import json
 import base64
+import re
+import hashlib
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import List, Optional, Dict, Any
@@ -29,6 +31,7 @@ import torch.nn as nn
 from torchvision import transforms, models
 import numpy as np
 import jwt
+from cryptography.fernet import Fernet
 
 BASE_DIR = Path(__file__).resolve().parent
 MODELS_DIR = BASE_DIR / "models"
@@ -92,25 +95,23 @@ DIAGNOSIS_DATA = {
     }
 }
 
-SYSTEM_INSTRUCTION = """Tu es l'Assistant officiel et expert du projet PalmVision, dédié à la détection et au diagnostic des maladies du palmier dattier (Phoenix dactylifera L.) causées par le ravageur Dubas bug (Ommatissus lybicus).
+SYSTEM_INSTRUCTION = """Tu es l'Assistant officiel du projet PalmVision, expert en diagnostic du Dubas bug (Ommatissus lybicus) sur le palmier dattier par Deep Learning.
 
-CONSIGNE STRICTE DE PÉRIMÈTRE & SÉCURITÉ :
-Tu réponds EXCLUSIVEMENT aux questions portant sur :
-1. Le projet PalmVision et la recherche associée : les 4 modèles de Deep Learning étudiés (ConvNeXt-Tiny champion avec 92.89% d'accuracy et 93.00% de Macro F1, MobileNetV3-ECA à 90.89%, Swin-T Vision Transformer à 90.67%, EfficientNet-V2-S à 88.89%), l'architecture (Transfer Learning, backbones gelés ImageNet, tête dense 256 avec BatchNorm et Dropout 0.2, optimiseur AdamW lr=1e-3, CosineAnnealingLR sur 40 époques).
-2. Le jeu de données (Dataset) : 3 000 images haute résolution (896x896, 892x892, 1792x1792 px), réparties en 4 classes : Healthy (800 images), Bug (600 images), Honey (800 images), Mixed (800 images dans le dossier 'Dubas/'). Split stratifié 70% train (2100 images), 15% val (450 images), 15% test (450 images).
-3. La biologie du palmier dattier, le cycle de vie du Dubas (Ommatissus lybicus), les symptômes (piqûres foliaires, miellat collant, champignon saprophyte de la fumagine noire bloquant la photosynthèse) et les protocoles de traitement agronomique (savon noir, huile de neem, lavage sous pression, pièges jaunes, élagage).
-4. Les statistiques, métriques par classe, matrices de confusion et comparatifs.
-5. L'analyse des photos foliaires fournies par l'utilisateur et les prédictions du modèle de vision du backend.
+CONSIGNES STRICTES DE STYLE & CONCISION :
+1. Sois TOUJOURS ULTRA-COURT, DIRECT ET TRÈS PROFESSIONNEL.
+2. Limite impérativement chaque réponse à 1 à 3 phrases maximum (ou 2-3 tirets factuels).
+3. Ne déroule JAMAIS de liste de présentation, de menus de bienvenue ou d'introduction inutile.
+4. Va droit au but avec un ton scientifique rigoureux et des faits exacts.
 
-RÈGLE IMPÉRATIVE EN CAS DE QUESTION HORS SUJET :
-Si l'utilisateur pose une question hors de ce domaine (par exemple sur la cuisine, le sport, la politique, des mathématiques sans rapport, du code général sans lien avec le projet, etc.), tu dois poliment et fermement REFUSER de répondre :
-"Je suis l'Assistant du projet PalmVision, spécialisé exclusivement dans le diagnostic des maladies du palmier dattier (Dubas bug, vision par ordinateur et statistiques du projet). Je ne peux répondre qu'aux questions relevant de ce domaine. N'hésitez pas à me questionner sur les 4 modèles Deep Learning, le dataset ou à me transmettre des photos pour analyse !"
+PÉRIMÈTRE EXCLUSIF :
+- Les 4 modèles Deep Learning étudiés (ConvNeXt-Tiny champion avec 92.89% d'accuracy et 93.00% Macro F1, MobileNetV3-ECA 90.89%, Swin-T 90.67%, EfficientNet-V2-S 88.89%).
+- Le dataset de 3 000 images haute résolution (Healthy: 800, Bug: 600, Honey: 800, Mixed: 800) avec split 70% train / 15% val / 15% test.
+- La biologie du ravageur Dubas (Ommatissus lybicus), symptômes (sécrétion de miellat, développement de fumagine saprophyte) et traitements (lavage sous pression, savon noir, pièges jaunes).
+- L'analyse des photos foliaires fournies par l'utilisateur.
 
-STYLE DE RÉPONSE OBLIGATOIRE :
-Sois TOUJOURS COURT, CONCIS, DIRECT et TRÈS PROFESSIONNEL.
-- Évite absolument les longues introductions, les bavardages et les gros pavés de texte.
-- Donne la réponse précise en 2 à 5 lignes claires ou avec quelques tirets concis.
-- Va droit au but avec des chiffres précis et un ton scientifique impeccable."""
+Si la question est hors sujet :
+"Je suis l'Assistant du projet PalmVision. Je ne réponds qu'aux questions relatives au diagnostic du palmier dattier et aux modèles Deep Learning."
+"""
 
 # ------------------------------------------------------------------------------
 # CHARGEMENT DES MODÈLES PYTORCH
@@ -186,24 +187,165 @@ def load_models_cache():
         print(f"Erreur chargement modèles : {e}")
 
 # ------------------------------------------------------------------------------
-# CONFIGURATION GEMINI
+# CHIFFREMENT LOCAL DES CLÉS API (AES-256 / FERNET) & CACHE MÉMOIRE
+# ------------------------------------------------------------------------------
+ENC_SALT = b"palmvision-secure-salt-2026-cda-expert-key"
+FERNET_KEY = base64.urlsafe_b64encode(hashlib.sha256(ENC_SALT).digest())
+fernet_cipher = Fernet(FERNET_KEY)
+
+def encrypt_str(plain_text: str) -> str:
+    if not plain_text or not plain_text.strip():
+        return ""
+    return fernet_cipher.encrypt(plain_text.strip().encode('utf-8')).decode('utf-8')
+
+def decrypt_str(cipher_text: str) -> str:
+    if not cipher_text or not cipher_text.strip():
+        return ""
+    try:
+        return fernet_cipher.decrypt(cipher_text.strip().encode('utf-8')).decode('utf-8')
+    except Exception:
+        # Fallback si déjà en texte clair (clé avant migration)
+        return cipher_text.strip()
+
+# Cache en mémoire des clés déchiffrées (déchiffrement unique au démarrage/premier appel)
+_cached_decrypted_keys: Optional[List[str]] = None
+
+def get_decrypted_keys() -> List[str]:
+    """
+    Récupère les clés API déchiffrées depuis la mémoire vive (accès 0ms).
+    Au tout premier appel, lit le fichier JSON chiffré, déchiffre les clés et les met en cache.
+    """
+    global _cached_decrypted_keys
+    if _cached_decrypted_keys is not None:
+        return _cached_decrypted_keys
+
+    cfg = get_gemini_config()
+    keys = []
+    
+    # 1. Clés chiffrées dans la liste 'encrypted_keys'
+    enc_list = cfg.get("encrypted_keys", [])
+    if isinstance(enc_list, list):
+        for ek in enc_list:
+            dk = decrypt_str(ek)
+            if dk and dk not in keys:
+                keys.append(dk)
+                
+    # 2. Clé unique de l'ancienne configuration (migration transparente)
+    old_key = cfg.get("api_key", "") or cfg.get("encrypted_key", "")
+    if old_key:
+        dk = decrypt_str(old_key)
+        if dk and dk not in keys:
+            keys.append(dk)
+            
+    # 3. Variable d'environnement en réserve
+    env_k = os.environ.get("GEMINI_API_KEY", "").strip()
+    if env_k and env_k not in keys:
+        keys.append(env_k)
+
+    _cached_decrypted_keys = keys
+    print(f"-> [Mémoire Cache] {len(keys)} clé(s) API déchiffrée(s) et chargées en cache.")
+    return _cached_decrypted_keys
+
+def reset_keys_cache():
+    global _cached_decrypted_keys
+    _cached_decrypted_keys = None
+
+# Regex de détection des salutations simples pour réponse ultra-courte instantanée
+GREETING_REGEX = re.compile(r'^(hi|hello|salut|bonjour|salam|coucou|yo|bonsoir|hey|hola)[\s!?.]*$', re.IGNORECASE)
+
+def get_model_cascade(requested_model: Optional[str]) -> List[str]:
+    """
+    Construit la liste des modèles de repli automatique en cas d'erreur.
+    Prend en compte les modèles demandés (ex. versions récentes ou futures 3.x).
+    """
+    req = (requested_model or "").replace("models/", "").strip()
+    ordered = []
+    if req:
+        ordered.append(req)
+        
+    known_models = [
+        "gemini-3.6-flash",   # principal
+        "gemini-3.7-flash",   # fallback 1
+        "gemini-3.8-flash",   # fallback 2
+        "gemini-2.0-flash",   # fallback stable
+        "gemini-1.5-flash",   # fallback ultime
+    ]
+    for m in known_models:
+        if m not in ordered:
+            ordered.append(m)
+    return ordered
+
+def execute_gemini_multikey_cascade(payload: dict, requested_model: str, key_pool: List[str]) -> dict:
+    """
+    Exécute la requête avec rotation multi-clés et cascade multi-modèles.
+    """
+    if not key_pool:
+        return {"ok": False, "error": "Aucune clé API disponible."}
+
+    models_to_try = get_model_cascade(requested_model)
+    errors = []
+
+    for model_name in models_to_try:
+        for k_idx, key in enumerate(key_pool):
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={key}"
+            try:
+                resp = requests.post(url, json=payload, timeout=20)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    candidates = data.get("candidates", [])
+                    if candidates:
+                        text = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+                        return {
+                            "ok": True,
+                            "reply": text,
+                            "model_used": model_name,
+                            "key_index": k_idx + 1
+                        }
+                else:
+                    status_code = resp.status_code
+                    err_info = resp.json().get("error", {}).get("message", resp.text)
+                    errors.append(f"{model_name} (Clé #{k_idx+1}, Code {status_code}): {err_info[:80]}")
+                    
+                    # Si modèle inexistant (404), on passe directement au modèle suivant
+                    if status_code == 404:
+                        break
+                    # Si quota dépassé (429) ou clé bloquée (403), on teste la clé suivante
+                    continue
+            except Exception as ex:
+                errors.append(f"{model_name} (Clé #{k_idx+1}, Réseau): {str(ex)[:60]}")
+                continue
+
+    last_err = errors[-1] if errors else "Échec de génération avec les modèles et clés configurés."
+    return {"ok": False, "error": last_err}
+
+# ------------------------------------------------------------------------------
+# CONFIGURATION GEMINI (STOCKAGE CHIFFRÉ EN LOCAL)
 # ------------------------------------------------------------------------------
 def get_gemini_config() -> Dict[str, Any]:
+    default_cfg = {
+        "encrypted_keys": [],
+        "model": "gemini-1.5-flash",
+        "temperature": 0.2,
+        "max_output_tokens": 512,
+        "encryption": "AES-256 (Fernet)"
+    }
     if CONFIG_FILE.exists():
         try:
             with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
-                return json.load(f)
+                data = json.load(f)
+                # Migration automatique : chiffrer la clé si elle était en clair
+                if "api_key" in data and data["api_key"] and not data.get("encrypted_keys"):
+                    plain = data["api_key"].strip()
+                    if plain:
+                        data["encrypted_keys"] = [encrypt_str(plain)]
+                        data.pop("api_key", None)
+                return {**default_cfg, **data}
         except Exception:
             pass
-    env_key = os.environ.get("GEMINI_API_KEY", "")
-    return {
-        "api_key": env_key,
-        "model": "gemini-1.5-flash",
-        "temperature": 0.3,
-        "max_output_tokens": 1024
-    }
+    return default_cfg
 
 def save_gemini_config(cfg: Dict[str, Any]):
+    reset_keys_cache()
     with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
         json.dump(cfg, f, indent=2, ensure_ascii=False)
 
@@ -437,6 +579,14 @@ async def chat_gemini(req: ChatRequest):
     user_msg = (req.message or "").strip()
     dl_model_name = req.dl_model if (req.dl_model and req.dl_model in dl_models) else "ConvNeXt-Tiny"
 
+    # Salutation simple : réponse immédiate, sobre et professionnelle (0 ms de latence, zéro pavé superflu)
+    if not req.images and GREETING_REGEX.match(user_msg):
+        return {
+            "reply": "Bonjour. Comment puis-je vous aider sur le projet PalmVision ?",
+            "status": "success",
+            "model": "Assistant"
+        }
+
     # 1. Traitement des photos envoyées au robot via le backend Deep Learning
     dl_analysis_results = []
     gemini_inline_images = []
@@ -479,31 +629,35 @@ async def chat_gemini(req: ChatRequest):
         dl_summary_text = "\n\n".join(parts)
 
     cfg = get_gemini_config()
-    api_key = req.api_key.strip() if (req.api_key and req.api_key.strip()) else cfg.get("api_key", "").strip()
+    
+    # Constitution du pool de clés API (déjà en cache mémoire, déchiffrées une seule fois)
+    key_pool = []
+    if req.api_key and req.api_key.strip():
+        key_pool.append(req.api_key.strip())
+    for k in get_decrypted_keys():
+        if k not in key_pool:
+            key_pool.append(k)
 
-    # Si pas de clé Gemini configurée
-    if not api_key:
+    # Si aucune clé API n'est disponible
+    if not key_pool:
         if dl_analysis_results:
             nb = len(dl_analysis_results)
             reply = (
                 f"🔬 **Analyse Deep Learning PalmVision ({dl_model_name}) — {nb} photo{'s' if nb > 1 else ''} :**\n\n"
                 f"{dl_summary_text}\n\n"
-                f"> *(Clé Google Gemini non configurée : analyse réalisée directement par le modèle neuronal local)*"
+                f"> *(Clé Google Gemini non configurée : analyse réalisée directement par le modèle local)*"
             )
             return {"reply": reply, "status": "success", "model": dl_model_name}
         return {
-            "reply": "⚠️ Clé API Gemini non configurée dans le Dashboard. Vous pouvez tout de même me transmettre des photos de palmes pour une analyse Deep Learning instantanée !",
+            "reply": "⚠️ Aucune clé API Google Gemini n'est configurée dans le Dashboard. Vous pouvez configurer une ou plusieurs clés, ou envoyer directement des photos pour analyse neuronale.",
             "status": "missing_api_key"
         }
 
     chosen_model = req.model if req.model else cfg.get("model", "gemini-1.5-flash")
-    if chosen_model.startswith("models/"):
-        chosen_model = chosen_model.replace("models/", "")
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{chosen_model}:generateContent?key={api_key}"
 
     contents = []
     if req.history:
-        for m in req.history[-10:]:
+        for m in req.history[-8:]:
             role = "user" if m.role == "user" else "model"
             contents.append({
                 "role": role,
@@ -522,11 +676,11 @@ async def chat_gemini(req: ChatRequest):
     if dl_analysis_results:
         prompt_with_dl = (
             f"L'utilisateur a envoyé {len(dl_analysis_results)} photo(s) foliaire(s) de palmier dattier.\n"
-            f"Notre modèle Deep Learning ({dl_model_name}) a analysé les images avec ces résultats précis :\n"
+            f"Résultats d'inférence de notre modèle Deep Learning ({dl_model_name}) :\n"
             f"{dl_summary_text}\n\n"
-            f"Question / Instruction de l'utilisateur : '{user_msg if user_msg else 'Analyse ces photos.'}'\n\n"
-            f"Consigne : Rédige une réponse courte, professionnelle et directe (2 à 5 lignes max). "
-            f"Confirme l'état détecté, résume les symptômes et donne les actions phytosanitaires immédiates."
+            f"Message de l'utilisateur : '{user_msg if user_msg else 'Analyse ces photos.'}'\n\n"
+            f"Consigne : Réponse très courte (2 à 3 lignes max). "
+            f"Confirme l'état détecté, résume les symptômes et donne l'action phytosanitaire immédiate."
         )
         current_parts.append({"text": prompt_with_dl})
     else:
@@ -543,57 +697,50 @@ async def chat_gemini(req: ChatRequest):
         },
         "contents": contents,
         "generationConfig": {
-            "temperature": float(cfg.get("temperature", 0.3)),
-            "maxOutputTokens": int(cfg.get("max_output_tokens", 1024))
+            "temperature": float(cfg.get("temperature", 0.2)),
+            "maxOutputTokens": int(cfg.get("max_output_tokens", 512))
         }
     }
 
-    try:
-        resp = requests.post(url, json=payload, timeout=25)
-        if resp.status_code == 200:
-            data = resp.json()
-            candidates = data.get("candidates", [])
-            if candidates:
-                text_part = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "")
-                return {"reply": text_part, "status": "success", "model": chosen_model}
-            elif dl_summary_text:
-                return {"reply": f"🔬 **Analyse Deep Learning PalmVision ({dl_model_name}) :**\n\n{dl_summary_text}", "status": "success"}
-            return {"reply": "Désolé, aucune réponse générée par le modèle.", "status": "empty"}
-        else:
-            if dl_summary_text:
-                return {
-                    "reply": f"🔬 **Analyse Deep Learning PalmVision ({dl_model_name}) :**\n\n{dl_summary_text}",
-                    "status": "success"
-                }
-            err_data = resp.json()
-            err_msg = err_data.get("error", {}).get("message", resp.text)
-            return {
-                "reply": f"⚠️ Erreur API Gemini ({resp.status_code}) : {err_msg}.",
-                "status": "error"
-            }
-    except Exception as e:
+    # Exécution avec bascule multi-clés et cascade multi-modèles automatique
+    res = execute_gemini_multikey_cascade(payload, chosen_model, key_pool)
+    if res.get("ok"):
+        return {
+            "reply": res["reply"],
+            "status": "success",
+            "model": res["model_used"]
+        }
+    else:
         if dl_summary_text:
             return {
                 "reply": f"🔬 **Analyse Deep Learning PalmVision ({dl_model_name}) :**\n\n{dl_summary_text}",
                 "status": "success"
             }
         return {
-            "reply": f"Erreur de communication réseau avec l'API Gemini : {str(e)}",
-            "status": "network_error"
+            "reply": f"⚠️ Erreur API : {res.get('error', 'Erreur inconnue')}.",
+            "status": "error"
         }
 
 # ------------------------------------------------------------------------------
 # CHARGEMENT DYNAMIQUE DES MODÈLES GEMINI DEPUIS LA CLÉ API
 # ------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
+# CHARGEMENT DYNAMIQUE DES MODÈLES GEMINI DEPUIS LA CLÉ API
+# ------------------------------------------------------------------------------
 @app.get("/api/gemini/models")
 def get_gemini_models_from_key(key: Optional[str] = None):
-    cfg = get_gemini_config()
-    api_key = key.strip() if (key and key.strip()) else cfg.get("api_key", "").strip()
+    api_key = key.strip() if (key and key.strip()) else ""
+    if not api_key:
+        cached_keys = get_decrypted_keys()
+        if cached_keys:
+            api_key = cached_keys[0]
     
     fallback_models = [
-        {"id": "gemini-1.5-flash", "name": "Gemini 1.5 Flash (Recommandé, rapide)", "desc": "Multimodal rapide et économique"},
-        {"id": "gemini-2.0-flash", "name": "Gemini 2.0 Flash (Nouvelle génération)", "desc": "Dernière version ultra-rapide de Google"},
-        {"id": "gemini-1.5-pro", "name": "Gemini 1.5 Pro (Haute capacité)", "desc": "Raisonnement complexe et grande fenêtre de contexte"}
+        {"id": "gemini-3.6-flash", "name": "Gemini 3.6 Flash (gemini-3.6-flash)", "desc": "Modèle principal recommandé"},
+        {"id": "gemini-3.7-flash", "name": "Gemini 3.7 Flash (gemini-3.7-flash)", "desc": "Fallback rapide"},
+        {"id": "gemini-3.8-flash", "name": "Gemini 3.8 Flash (gemini-3.8-flash)", "desc": "Dernière version"},
+        {"id": "gemini-2.0-flash", "name": "Gemini 2.0 Flash", "desc": "Fallback stable"},
+        {"id": "gemini-1.5-flash", "name": "Gemini 1.5 Flash", "desc": "Fallback ultime"},
     ]
     
     if not api_key:
@@ -610,7 +757,6 @@ def get_gemini_models_from_key(key: Optional[str] = None):
                 methods = m.get("supportedGenerationMethods", [])
                 if "generateContent" in methods:
                     m_id = m.get("name", "").replace("models/", "")
-                    # Prioriser les modèles Gemini
                     if "gemini" in m_id.lower():
                         extracted.append({
                             "id": m_id,
@@ -628,52 +774,97 @@ def get_gemini_models_from_key(key: Optional[str] = None):
 # ROUTES CONFIGURATION & DASHBOARD (PROTÉGÉES PAR JWT)
 # ------------------------------------------------------------------------------
 class ConfigUpdate(BaseModel):
-    api_key: str
+    api_key: Optional[str] = None
+    api_keys: Optional[List[str]] = None
     model: Optional[str] = "gemini-1.5-flash"
-    temperature: Optional[float] = 0.3
+    temperature: Optional[float] = 0.2
 
 @app.get("/api/config")
 def get_config(user: str = Depends(verify_jwt_token)):
     cfg = get_gemini_config()
-    raw_key = cfg.get("api_key", "")
-    masked_key = (raw_key[:6] + "..." + raw_key[-4:]) if len(raw_key) > 10 else ("Configurée" if raw_key else "Non configurée")
+    keys = get_decrypted_keys()
+    masked_list = [
+        (k[:6] + "..." + k[-4:]) if len(k) > 10 else "Clé active"
+        for k in keys
+    ]
     return {
-        "has_key": bool(raw_key),
-        "masked_key": masked_key,
+        "has_key": len(keys) > 0,
+        "keys_count": len(keys),
+        "masked_keys": masked_list,
+        "masked_key": masked_list[0] if masked_list else "Non configurée",
         "model": cfg.get("model", "gemini-1.5-flash"),
-        "temperature": cfg.get("temperature", 0.3),
-        "authenticated_user": user
+        "temperature": cfg.get("temperature", 0.2),
+        "authenticated_user": user,
+        "encryption": "AES-256 (Fernet)",
+        "in_memory_cached": True
     }
 
 @app.post("/api/config")
 def update_config(body: ConfigUpdate, user: str = Depends(verify_jwt_token)):
     cfg = get_gemini_config()
-    if body.api_key is not None and body.api_key.strip():
-        cfg["api_key"] = body.api_key.strip()
+    new_keys = []
+    
+    # Accepter une ou plusieurs clés (séparées par virgule, point-virgule ou retours chariot)
+    raw_inputs = []
+    if body.api_keys:
+        raw_inputs.extend(body.api_keys)
+    if body.api_key and body.api_key.strip():
+        parts = re.split(r'[\r\n,;]+', body.api_key.strip())
+        raw_inputs.extend(parts)
+        
+    for k in raw_inputs:
+        cleaned = k.strip()
+        if cleaned and cleaned not in new_keys:
+            new_keys.append(cleaned)
+            
+    if new_keys:
+        # Stockage chiffré dans le fichier local (avec Fernet AES-256)
+        cfg["encrypted_keys"] = [encrypt_str(k) for k in new_keys]
+        cfg.pop("api_key", None)
+        
     if body.model:
         cfg["model"] = body.model.replace("models/", "")
     if body.temperature is not None:
         cfg["temperature"] = body.temperature
+        
     save_gemini_config(cfg)
-    return {"status": "saved", "has_key": bool(cfg.get("api_key")), "user": user}
+    decrypted = get_decrypted_keys()
+    
+    return {
+        "status": "saved",
+        "has_key": len(decrypted) > 0,
+        "keys_count": len(decrypted),
+        "encryption": "AES-256 (Fernet)",
+        "cached": True,
+        "user": user
+    }
 
 @app.post("/api/config/test")
 def test_gemini_key(body: ConfigUpdate, user: str = Depends(verify_jwt_token)):
-    key = body.api_key.strip() if body.api_key else get_gemini_config().get("api_key", "")
-    if not key:
-        return {"ok": False, "message": "Clé API vide."}
+    keys = []
+    if body.api_key and body.api_key.strip():
+        parts = re.split(r'[\r\n,;]+', body.api_key.strip())
+        keys = [p.strip() for p in parts if p.strip()]
+    elif body.api_keys:
+        keys = [k.strip() for k in body.api_keys if k.strip()]
+    else:
+        keys = get_decrypted_keys()
+        
+    if not keys:
+        return {"ok": False, "message": "Aucune clé API disponible à tester."}
+
     m = body.model if body.model else "gemini-1.5-flash"
-    m_clean = m.replace("models/", "")
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{m_clean}:generateContent?key={key}"
-    payload = {"contents": [{"parts": [{"text": "Réponds simplement par 'OK'."}]}]}
-    try:
-        r = requests.post(url, json=payload, timeout=8)
-        if r.status_code == 200:
-            return {"ok": True, "message": f"Clé API valide et opérationnelle avec {m_clean} !"}
-        else:
-            return {"ok": False, "message": f"Erreur {r.status_code}: {r.json().get('error', {}).get('message', r.text)}"}
-    except Exception as e:
-        return {"ok": False, "message": f"Erreur de connexion : {e}"}
+    res = execute_gemini_multikey_cascade(
+        payload={"contents": [{"parts": [{"text": "OK"}]}]},
+        requested_model=m,
+        key_pool=keys
+    )
+    if res.get("ok"):
+        return {
+            "ok": True,
+            "message": f"Succès ! Modèle actif : {res.get('model_used')}, Clé #{res.get('key_index')}. {len(keys)} clé(s) chiffrée(s) (AES-256) et chargées en cache mémoire."
+        }
+    return {"ok": False, "message": f"Échec du test : {res.get('error')}"}
 
 @app.get("/api/dashboard")
 def get_dashboard_data():
