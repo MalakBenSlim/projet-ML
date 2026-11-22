@@ -51,7 +51,7 @@ export default function App() {
   // Global states
   const [modelsList, setModelsList] = useState([]);
   const [selectedModel, setSelectedModel] = useState('ConvNeXt-Tiny');
-  const [geminiConfig, setGeminiConfig] = useState({ has_key: false, masked_key: '', model: 'gemini-1.5-flash' });
+  const [geminiConfig, setGeminiConfig] = useState({ has_key: false, masked_key: '', model: 'gemini-3.6-flash' });
   const [availableGeminiModels, setAvailableGeminiModels] = useState([]);
   const [loadingGeminiModels, setLoadingGeminiModels] = useState(false);
   const [modelsSourceApi, setModelsSourceApi] = useState(false);
@@ -84,7 +84,7 @@ export default function App() {
   // Dashboard configuration states
   const [inputApiKey, setInputApiKey] = useState('');
   const [showApiKey, setShowApiKey] = useState(false);
-  const [selectedGeminiModel, setSelectedGeminiModel] = useState('gemini-1.5-flash');
+  const [selectedGeminiModel, setSelectedGeminiModel] = useState('gemini-3.6-flash');
   const [savingConfig, setSavingConfig] = useState(false);
   const [testingKey, setTestingKey] = useState(false);
   const [configStatus, setConfigStatus] = useState(null);
@@ -336,7 +336,7 @@ export default function App() {
           history: newMessages.slice(1, -1).map(m => ({ role: m.role, text: m.text })),
           images: currentImages.map(img => img.base64),
           dl_model: selectedModel,
-          model: geminiConfig.model || selectedGeminiModel || 'gemini-1.5-flash'
+          model: geminiConfig.model || selectedGeminiModel || 'gemini-3.6-flash'
         })
       });
       const data = await res.json();

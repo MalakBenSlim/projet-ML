@@ -250,34 +250,32 @@ def reset_keys_cache():
     global _cached_decrypted_keys
     _cached_decrypted_keys = None
 
-# Regex de détection des salutations simples pour réponse ultra-courte instantanée
-GREETING_REGEX = re.compile(r'^(hi|hello|salut|bonjour|salam|coucou|yo|bonsoir|hey|hola)[\s!?.]*$', re.IGNORECASE)
+# Regex de détection des salutations simples (tolère répétition de lettres : helloooo, saluuut, etc.)
+GREETING_REGEX = re.compile(
+    r'^(h+e+l+l*o+|h+i+|s+a+l+u+t+|b+o+n+j+o+u+r+|s+a+l+a+m+|c+o+u+c+o+u+|y+o+|b+o+n+s+o+i+r+|h+e+y+|h+o+l+a+)[\s!?.]*$',
+    re.IGNORECASE
+)
 
-def get_model_cascade(requested_model: Optional[str]) -> List[str]:
+def get_model_cascade(requested_model: Optional[str] = None) -> List[str]:
     """
-    Construit la liste des modèles de repli automatique en cas d'erreur.
-    Prend en compte les modèles demandés (ex. versions récentes ou futures 3.x).
+    Cascade stricte demandée par l'utilisateur :
+    gemini-3.6-flash -> gemini-3.7-flash -> gemini-3.8-flash.
+    Si un modèle 3.x spécifique est demandé, il est prioritaire, suivi des autres 3.x.
     """
+    priority_3x = ["gemini-3.6-flash", "gemini-3.7-flash", "gemini-3.8-flash"]
     req = (requested_model or "").replace("models/", "").strip()
-    ordered = []
-    if req:
-        ordered.append(req)
+    
+    if req in priority_3x:
+        ordered = [req] + [m for m in priority_3x if m != req]
+    else:
+        ordered = list(priority_3x)
         
-    known_models = [
-        "gemini-3.6-flash",   # principal
-        "gemini-3.7-flash",   # fallback 1
-        "gemini-3.8-flash",   # fallback 2
-        "gemini-2.0-flash",   # fallback stable
-        "gemini-1.5-flash",   # fallback ultime
-    ]
-    for m in known_models:
-        if m not in ordered:
-            ordered.append(m)
     return ordered
 
 def execute_gemini_multikey_cascade(payload: dict, requested_model: str, key_pool: List[str]) -> dict:
     """
-    Exécute la requête avec rotation multi-clés et cascade multi-modèles.
+    Exécute la requête avec rotation multi-clés (quota atteint / 429 / 403)
+    et cascade multi-modèles stricte (gemini-3.6-flash -> gemini-3.7-flash -> gemini-3.8-flash).
     """
     if not key_pool:
         return {"ok": False, "error": "Aucune clé API disponible."}
@@ -289,33 +287,49 @@ def execute_gemini_multikey_cascade(payload: dict, requested_model: str, key_poo
         for k_idx, key in enumerate(key_pool):
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={key}"
             try:
-                resp = requests.post(url, json=payload, timeout=20)
-                if resp.status_code == 200:
+                resp = requests.post(url, json=payload, timeout=25)
+                status_code = resp.status_code
+                
+                if status_code == 200:
                     data = resp.json()
                     candidates = data.get("candidates", [])
                     if candidates:
                         text = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "")
-                        return {
-                            "ok": True,
-                            "reply": text,
-                            "model_used": model_name,
-                            "key_index": k_idx + 1
-                        }
-                else:
-                    status_code = resp.status_code
-                    err_info = resp.json().get("error", {}).get("message", resp.text)
-                    errors.append(f"{model_name} (Clé #{k_idx+1}, Code {status_code}): {err_info[:80]}")
-                    
-                    # Si modèle inexistant (404), on passe directement au modèle suivant
-                    if status_code == 404:
-                        break
-                    # Si quota dépassé (429) ou clé bloquée (403), on teste la clé suivante
+                        if text:
+                            return {
+                                "ok": True,
+                                "reply": text,
+                                "model_used": model_name,
+                                "key_index": k_idx + 1
+                            }
+                    errors.append(f"{model_name} (Clé #{k_idx+1}) : Réponse vide")
+                    break
+
+                # Erreur HTTP
+                err_data = resp.json().get("error", {}) if resp.headers.get("content-type", "").startswith("application/json") else {}
+                err_msg = err_data.get("message", resp.text)
+                
+                # Quota dépassé (429) ou clé restreinte (401, 403) -> essayer la clé suivante immédiatement
+                if status_code in [429, 401, 403] or "quota" in err_msg.lower() or "resource_exhausted" in err_msg.lower():
+                    errors.append(f"Clé #{k_idx+1} ({model_name}) : Quota atteint ({status_code}) -> rotation vers clé suivante")
                     continue
-            except Exception as ex:
-                errors.append(f"{model_name} (Clé #{k_idx+1}, Réseau): {str(ex)[:60]}")
+                    
+                # Modèle inexistant (404) ou serveur surchargé (500, 502, 503, 504) -> basculer au modèle suivant immédiatement
+                if status_code in [404, 500, 502, 503, 504]:
+                    errors.append(f"{model_name} indisponible ({status_code}) -> passage au modèle suivant")
+                    break
+                    
+                errors.append(f"{model_name} (Clé #{k_idx+1}, Code {status_code}) : {err_msg[:60]}")
                 continue
 
-    last_err = errors[-1] if errors else "Échec de génération avec les modèles et clés configurés."
+            except requests.exceptions.Timeout:
+                errors.append(f"{model_name} (Clé #{k_idx+1}) : Timeout -> passage au modèle suivant")
+                break
+            except Exception as ex:
+                errors.append(f"{model_name} (Clé #{k_idx+1}) : Erreur réseau {str(ex)[:50]}")
+                continue
+
+    last_err = errors[-1] if errors else "Échec avec les modèles Gemini 3.6, 3.7 et 3.8."
     return {"ok": False, "error": last_err}
 
 # ------------------------------------------------------------------------------
@@ -324,7 +338,7 @@ def execute_gemini_multikey_cascade(payload: dict, requested_model: str, key_poo
 def get_gemini_config() -> Dict[str, Any]:
     default_cfg = {
         "encrypted_keys": [],
-        "model": "gemini-1.5-flash",
+        "model": "gemini-3.6-flash",
         "temperature": 0.2,
         "max_output_tokens": 512,
         "encryption": "AES-256 (Fernet)"
@@ -653,7 +667,7 @@ async def chat_gemini(req: ChatRequest):
             "status": "missing_api_key"
         }
 
-    chosen_model = req.model if req.model else cfg.get("model", "gemini-1.5-flash")
+    chosen_model = req.model if req.model else cfg.get("model", "gemini-3.6-flash")
 
     contents = []
     if req.history:
@@ -776,7 +790,7 @@ def get_gemini_models_from_key(key: Optional[str] = None):
 class ConfigUpdate(BaseModel):
     api_key: Optional[str] = None
     api_keys: Optional[List[str]] = None
-    model: Optional[str] = "gemini-1.5-flash"
+    model: Optional[str] = "gemini-3.6-flash"
     temperature: Optional[float] = 0.2
 
 @app.get("/api/config")
@@ -792,7 +806,7 @@ def get_config(user: str = Depends(verify_jwt_token)):
         "keys_count": len(keys),
         "masked_keys": masked_list,
         "masked_key": masked_list[0] if masked_list else "Non configurée",
-        "model": cfg.get("model", "gemini-1.5-flash"),
+        "model": cfg.get("model", "gemini-3.6-flash"),
         "temperature": cfg.get("temperature", 0.2),
         "authenticated_user": user,
         "encryption": "AES-256 (Fernet)",
